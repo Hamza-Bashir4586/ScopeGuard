@@ -1,0 +1,11 @@
+COASTAL BUILDING SUPPLY - INVOICE #CBS-48817
+Date: 2026-03-11
+Sold to: Keystone Interiors, Inc.     Job: Harbor View MOB - L2 corridor soffit
+
+Qty   Item                                    Unit Price    Ext.
+40    3-5/8" 20ga metal stud, 10 ft           $6.85         $274.00
+12    3-5/8" 20ga track, 10 ft                $5.95         $71.40
+15    5/8" Type X gypsum board, 4x10          $17.80        $267.00
+
+Total soffit materials: $612.40
+Paid - account 7781.

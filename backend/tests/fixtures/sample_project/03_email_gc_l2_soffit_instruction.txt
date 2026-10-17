@@ -1,0 +1,14 @@
+From: Dave Romero <dromero@meridianbuilders.example>
+To: Lisa Park <lpark@keystoneinteriors.example>
+Date: 2026-03-10
+Subject: L2 corridor - new soffit at relocated duct (RFI-014)
+
+Lisa,
+
+Per the RFI-014 response, the mechanical sub relocated the main supply duct below the Level 2 corridor ceiling between gridlines C and F.
+Please frame and board a new soffit along the Level 2 corridor from gridline C to F to conceal the relocated duct, per the attached ASI-03 sketch.
+Proceed starting Thursday 3/12 so the ceiling grid crew is not held up.
+
+Thanks,
+Dave Romero
+Superintendent, Meridian Builders

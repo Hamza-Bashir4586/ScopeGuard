@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ScopeGuard - AI assistant for construction subcontractors. Finds potential extra work missing from
+  the change-order log in a Box project folder and drafts source-cited change-request packets.
+
+Parameters:
+  BoxFolderId:
+    Type: String
+    Description: Box folder ID of the project folder to scan (the number at the end of the Box folder URL).
+  BedrockModelId:
+    Type: String
+    Default: us.anthropic.claude-sonnet-4-6
+    Description: Bedrock cross-region inference profile ID used with the Converse API.
+  AllowedOrigin:
+    Type: String
+    Default: "*"
+    Description: CORS allowed origin for the HTTP API (e.g. https://main.xxxxxx.amplifyapp.com).
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures:
+      - arm64
+    CodeUri: backend/
+    Environment:
+      Variables:
+        DATA_BUCKET: !Ref DataBucket
+        BOX_SECRET_ARN: !Ref BoxSecret
+        BOX_FOLDER_ID: !Ref BoxFolderId
+        BEDROCK_MODEL_ID: !Ref BedrockModelId
+        STORE: s3
+        BOX_MODE: box
+        LLM_MODE: bedrock
+
+Resources:
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  BoxSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: scopeguard/box
+      Description: Box Client Credentials Grant app credentials for ScopeGuard. Replace the placeholder values after the first deploy.
+      SecretString: '{"client_id":"REPLACE","client_secret":"REPLACE","enterprise_id":"REPLACE"}'
+
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: ScopeGuard scan worker (Box -> text -> Bedrock -> verification -> S3 JSON)
+      Handler: worker_handler.handler
+      Timeout: 900
+      MemorySize: 2048
+      EventInvokeConfig:
+        MaximumRetryAttempts: 0
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref DataBucket
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref BoxSecret
+        - Statement:
+            - Sid: BedrockInvoke
+              Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource:
+                - arn:aws:bedrock:*::foundation-model/*
+                - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: ScopeGuard HTTP API (scans, findings review, packets)
+      Handler: api_handler.handler
+      Timeout: 29
+      MemorySize: 512
+      Environment:
+        Variables:
+          WORKER_FUNCTION_NAME: !Ref WorkerFunction
+          ALLOWED_ORIGIN: !Ref AllowedOrigin
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref DataBucket
+        - LambdaInvokePolicy:
+            FunctionName: !Ref WorkerFunction
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref BoxSecret
+      Events:
+        CreateScan:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /scans
+        GetScan:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /scans/{scan_id}
+        PatchFinding:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: PATCH
+            Path: /findings/{finding_id}
+        CreatePacket:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /packets
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref AllowedOrigin
+        AllowMethods:
+          - GET
+          - POST
+          - PATCH
+          - OPTIONS
+        AllowHeaders:
+          - content-type
+        MaxAge: 600
+
+Outputs:
+  ApiUrl:
+    Description: Base URL for NEXT_PUBLIC_API_URL
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}
+  DataBucketName:
+    Value: !Ref DataBucket
+  BoxSecretArn:
+    Description: Put the real Box CCG credentials here (aws secretsmanager put-secret-value)
+    Value: !Ref BoxSecret
+  WorkerFunctionName:
+    Value: !Ref WorkerFunction

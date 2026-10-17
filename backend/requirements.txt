@@ -1,0 +1,6 @@
+# Runtime dependencies vendored into the Lambda package by `sam build`.
+# boto3/botocore are provided by the Lambda Python 3.12 runtime (see requirements-dev.txt).
+box-sdk-gen>=1.10,<2
+pypdf>=5.0,<7
+fpdf2>=2.8,<3
+pydantic>=2.8,<3
