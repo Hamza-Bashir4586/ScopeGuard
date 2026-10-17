@@ -25,6 +25,39 @@ PM manually cross-referencing everything by hand.
 Not yet reconciled with the README or the code — just recording the gap for now. Decision on
 whether/how to narrow the README's framing (or the demo data / prompts) to match is still open.
 
+## Data model: Scan → Findings → Packet
+
+The core object lifecycle, independent of the AWS plumbing:
+
+```mermaid
+flowchart LR
+    SCAN["Scan<br/>one run over the whole<br/>project folder"]
+    FINDINGS["Findings[]<br/>editable — reviewed,<br/>confirmed, or dismissed"]
+    PACKET["Packet<br/>frozen PDF snapshot,<br/>exported to Box"]
+
+    SCAN -- "produces" --> FINDINGS
+    FINDINGS -- "confirmed finding<br/>promoted to" --> PACKET
+```
+
+- **Scan** — one analysis pass over the *entire* Box project folder. Not raw data — it's already a
+  structured, AI-produced reconciliation report (narrative, cost breakdown, evidence per item) — just
+  not yet finalized.
+- **Finding** — one line item within a scan's report: one discrepancy (e.g. unbilled extra labor
+  hours, or an unbilled hardware-substitution cost delta — see the two example patterns above).
+  **Editable** — a PM reviews it via `PATCH /findings/{id}`, can correct the AI's numbers/narrative,
+  answer open questions, and set its status to `confirmed`, `dismissed`, or leave it `unreviewed`.
+- **Packet** — a **confirmed** finding, promoted into a frozen PDF and uploaded back to Box. Scoped to
+  *one* finding, not the whole scan — a scan with 3 findings can produce up to 3 independent packets,
+  each confirmed/exported on its own schedule. "Frozen" is per-packet, not permanent on the finding:
+  if a PM edits a finding after generating a packet and regenerates, that produces a *second* packet
+  (packets are a list, not a single slot) — so a finding can be promoted more than once over time,
+  each time producing its own new frozen snapshot.
+
+Why this distinction matters for the demo: the **scan** is the thing that proves "AI found this
+faster than a human could" (speed); the **packet** is the thing that actually gets used to go bill
+the client (the business payoff). The app's whole review workflow exists in the gap between the two —
+AI proposes, a human decides what's real, only what's confirmed becomes a real, submittable document.
+
 ## Architecture diagram (Mermaid version of README's ASCII diagram)
 
 Same content as the README's architecture block, redrawn for readability. Not swapped into the
