@@ -10,7 +10,9 @@ const nextConfig: NextConfig = {
   images: { unoptimized: true },
   turbopack: {
     rules: {
-      "*.css": {
+      // Tailwind processes the global entry only. Rewriting .module.css as plain
+      // .css removes its class-name exports and leaves component styles unbound.
+      "globals.css": {
         loaders: ["@tailwindcss/turbopack"],
         as: "*.css",
       },

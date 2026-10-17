@@ -1,0 +1,283 @@
+{
+  "docs": {
+    "scope": {
+      "name": "Signed scope and agreement.pdf",
+      "category": "Original agreement",
+      "date": "Sep 28, 2026",
+      "pages": [
+        {
+          "title": "Electrical subcontract · Project overview",
+          "paragraphs": [
+            "Riverside Office Renovation. Customer: Northline Builders. Contractor: Summit Electrical.",
+            "Agreed contract value: $125,000. Project dates: Oct 5 – Nov 20, 2026.",
+            "Electrical fit-out under drawing E-101 Rev A, with scope and pricing exhibits incorporated."
+          ]
+        },
+        {
+          "title": "Exhibit A · Included scope",
+          "paragraphs": [
+            "Supply and install 48 outlets at the locations shown on E-101 Rev A.",
+            "Supply and install 24 LED fixtures.",
+            "Six branch circuits included in the signed scope.",
+            "Complete testing and labeling of installed circuits."
+          ],
+          "highlight": [
+            1,
+            2
+          ]
+        },
+        {
+          "title": "Exhibit A · Exclusions and changes",
+          "paragraphs": [
+            "Weekend installation excluded.",
+            "Modifications to existing service equipment excluded.",
+            "Additional work and proposed pricing are subject to the contractual change and approval procedure."
+          ],
+          "highlight": [
+            0
+          ]
+        }
+      ]
+    },
+    "exhibit": {
+      "name": "Exhibit B — Labor and pricing.pdf",
+      "category": "Original agreement",
+      "date": "Sep 28, 2026",
+      "pages": [
+        {
+          "title": "Exhibit B · Pricing basis",
+          "paragraphs": [
+            "Additional labor: $100 per hour, subject to the contract change procedure.",
+            "Materials: documented cost.",
+            "No weekend premium is specified in this sample exhibit."
+          ],
+          "highlight": [
+            0
+          ]
+        }
+      ]
+    },
+    "co001": {
+      "name": "CO-001 — Signed change approval.pdf",
+      "category": "Approvals",
+      "date": "Oct 8, 2026",
+      "pages": [
+        {
+          "title": "Change order CO-001",
+          "paragraphs": [
+            "Provide two additional dedicated branch circuits for conference-room equipment.",
+            "Approved additional amount: $8,500.",
+            "Signed acceptance recorded by the customer project manager on Oct 8, 2026."
+          ],
+          "highlight": [
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "completion": {
+      "name": "Conference-room completion record.pdf",
+      "category": "Field records",
+      "date": "Oct 9, 2026",
+      "pages": [
+        {
+          "title": "Work completion record",
+          "paragraphs": [
+            "Location: conference room. Reference: CO-001.",
+            "Two additional conference-room circuits installed under CO-001.",
+            "Testing completed and work recorded by the foreman on Oct 9, 2026."
+          ],
+          "highlight": [
+            1
+          ]
+        }
+      ]
+    },
+    "inv014": {
+      "name": "INV-014 — Original scope invoice.pdf",
+      "category": "Billing",
+      "date": "Oct 13, 2026",
+      "pages": [
+        {
+          "title": "Invoice INV-014",
+          "paragraphs": [
+            "Bill to: Northline Builders. Project: Riverside Office Renovation.",
+            "Original scope billing: $125,000.",
+            "No separate CO-001 charge is listed in this fictional invoice."
+          ],
+          "highlight": [
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    "inv015": {
+      "name": "INV-015 — Lighting upgrade invoice.pdf",
+      "category": "Billing",
+      "date": "Oct 14, 2026",
+      "pages": [
+        {
+          "title": "Invoice INV-015",
+          "paragraphs": [
+            "Bill to: Northline Builders. Project: Riverside Office Renovation.",
+            "CO-002 lighting upgrade: $1,500.",
+            "This previously invoiced upgrade is distinct from the two additional fixtures proposed in SI-009. No CO-001 charge is listed."
+          ],
+          "highlight": [
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    "si009": {
+      "name": "SI-009 — Revised fixture quantity.pdf",
+      "category": "Change instructions",
+      "date": "Oct 14, 2026",
+      "pages": [
+        {
+          "title": "Site instruction SI-009",
+          "paragraphs": [
+            "Project: Riverside Office Renovation.",
+            "Revised installation requires 26 LED fixtures.",
+            "Submit pricing for the additional quantity for customer review."
+          ],
+          "highlight": [
+            1
+          ]
+        }
+      ]
+    },
+    "quote": {
+      "name": "Additional fixture quotation.pdf",
+      "category": "Pricing",
+      "date": "Oct 15, 2026",
+      "pages": [
+        {
+          "title": "Quotation · Additional fixtures",
+          "paragraphs": [
+            "Two additional LED fixtures, supplied and installed.",
+            "Quantity 2 × $800 each = $1,600 proposed.",
+            "Customer acceptance has not been recorded in the supplied file."
+          ],
+          "highlight": [
+            1
+          ]
+        }
+      ]
+    },
+    "si008": {
+      "name": "SI-008 — Saturday access instruction.pdf",
+      "category": "Change instructions",
+      "date": "Oct 10, 2026",
+      "pages": [
+        {
+          "title": "Site instruction SI-008",
+          "paragraphs": [
+            "Project: Riverside Office Renovation.",
+            "Complete the installation during Saturday access.",
+            "This instruction documents the requested access window; separate price acceptance is not included."
+          ],
+          "highlight": [
+            1
+          ]
+        }
+      ]
+    },
+    "timesheet": {
+      "name": "Saturday crew timesheet.pdf",
+      "category": "Field records",
+      "date": "Oct 11, 2026",
+      "pages": [
+        {
+          "title": "Crew timesheet · Saturday work",
+          "paragraphs": [
+            "Work: installation during Saturday access, reference SI-008.",
+            "Nine labor hours recorded.",
+            "At the $100/hour rate in Exhibit B: $900 labor cost. No weekend premium assumed."
+          ],
+          "highlight": [
+            1,
+            2
+          ]
+        }
+      ]
+    }
+  },
+  "findings": {
+    "circuits": {
+      "id": "D-001",
+      "title": "Additional conference-room circuits",
+      "amount": 8500,
+      "approval": "Previously approved · CO-001",
+      "reason": "The completion record and signed change describe the same circuits. No matching charge was identified in the supplied invoices. Confirm billing coverage before issuing a new charge.",
+      "evidence": [
+        [
+          "Original agreement",
+          "Scope exhibit, p. 2",
+          "Six branch circuits included in the signed scope."
+        ],
+        [
+          "Approved change and completed work",
+          "CO-001 + completion record, p. 1",
+          "Two additional conference-room circuits approved at $8,500 and recorded as completed."
+        ],
+        [
+          "Billing comparison",
+          "INV-014 / INV-015, p. 1",
+          "Neither supplied invoice contains a matching CO-001 charge."
+        ]
+      ]
+    },
+    "fixtures": {
+      "id": "D-002",
+      "title": "Two additional LED fixtures",
+      "amount": 1600,
+      "approval": "Proposed addition · Customer sign-off required",
+      "reason": "The revised quantity exceeds the original scope by two fixtures. The quoted all-in rate is $800 each, producing a $1,600 proposal. No prior billing or customer acceptance was found in the supplied records.",
+      "evidence": [
+        [
+          "Original agreement",
+          "Scope exhibit, p. 2",
+          "Supply and install 24 LED fixtures."
+        ],
+        [
+          "Changed requirement",
+          "SI-009, p. 1",
+          "Revised installation requires 26 LED fixtures."
+        ],
+        [
+          "Proposed pricing",
+          "Fixture quotation, p. 1",
+          "Two additional fixtures, supplied and installed: 2 × $800 = $1,600."
+        ]
+      ]
+    },
+    "weekend": {
+      "id": "D-003",
+      "title": "Weekend installation",
+      "amount": 900,
+      "approval": "Proposed change · Authorization unresolved; customer sign-off required",
+      "reason": "A field instruction requests work excluded from the original agreement. The timesheet records nine hours at the $100/hour rate, supporting $900 in labor cost. That cost alone does not establish payment entitlement.",
+      "evidence": [
+        [
+          "Original agreement",
+          "Scope exhibit, p. 3",
+          "Weekend installation excluded."
+        ],
+        [
+          "New instruction",
+          "SI-008, p. 1",
+          "Complete the installation during Saturday access."
+        ],
+        [
+          "Work and cost record",
+          "Timesheet + Exhibit B",
+          "Nine hours recorded at $100/hour = $900. No weekend premium assumed."
+        ]
+      ]
+    }
+  }
+}
