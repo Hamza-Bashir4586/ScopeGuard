@@ -110,3 +110,40 @@ def test_errors(local_env):
     assert resp["statusCode"] == 400 and "error" in json.loads(resp["body"])
     assert call("GET", "/nothing")[0] == 404
     assert api_handler.handler({"rawPath": "/scans", "requestContext": {"http": {"method": "OPTIONS"}}})["statusCode"] == 204
+
+
+def test_list_saved_scans(local_env):
+    status, body = call("GET", "/scans")
+    assert status == 200 and body == {"scans": []}
+
+    first = call("POST", "/scans", {})[1]["scan_id"]
+    wait_for_scan(first)
+    time.sleep(0.01)  # distinct started_at
+    second = call("POST", "/scans", {})[1]["scan_id"]
+    wait_for_scan(second)
+
+    status, body = call("GET", "/scans")
+    assert status == 200
+    scans = body["scans"]
+    assert [s["scan_id"] for s in scans] == [second, first]  # newest first
+    assert scans[0]["status"] == "completed" and scans[0]["finished_at"]
+    assert scans[0]["summary"] == {
+        "file_count": 10, "finding_count": 3, "new_count": 1, "needs_info_count": 1,
+        "already_recorded_count": 1, "potential_total": "3297.51",
+    }
+    assert "findings" not in scans[0]  # summaries only; GET /scans/{id} has the details
+
+    event = {"rawPath": "/scans", "queryStringParameters": {"limit": "1"}, "requestContext": {"http": {"method": "GET"}}}
+    assert [s["scan_id"] for s in json.loads(api_handler.handler(event)["body"])["scans"]] == [second]
+
+
+def test_list_backfills_summary_for_old_scans(local_env):
+    from scopeguard.store import get_store
+
+    scan_id = call("POST", "/scans", {})[1]["scan_id"]
+    wait_for_scan(scan_id)
+    get_store().update_scan(scan_id, summary=None)  # as if completed before summaries existed
+    scans = call("GET", "/scans")[1]["scans"]
+    assert scans[0]["summary"]["finding_count"] == 3
+    meta = next(i for i in get_store().get_scan_items(scan_id) if i["SK"] == "META")
+    assert meta["summary"]["finding_count"] == 3

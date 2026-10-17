@@ -51,8 +51,12 @@ class _FakeS3:
             raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
         return {"Body": io.BytesIO(self.objects[(Bucket, Key)])}
 
-    def list_objects_v2(self, Bucket, Prefix, ContinuationToken=None):
+    def list_objects_v2(self, Bucket, Prefix, ContinuationToken=None, Delimiter=None):
         keys = sorted(k for b, k in self.objects if b == Bucket and k.startswith(Prefix))
+        if Delimiter:
+            prefixes = sorted({Prefix + k[len(Prefix):].split(Delimiter)[0] + Delimiter
+                               for k in keys if Delimiter in k[len(Prefix):]})
+            return {"CommonPrefixes": [{"Prefix": p} for p in prefixes], "IsTruncated": False}
         return {"Contents": [{"Key": k} for k in keys], "IsTruncated": False}
 
 
@@ -95,3 +99,11 @@ def test_s3_store_rejects_floats():
     store = S3Store("bucket", client=_FakeS3())
     with pytest.raises(TypeError):
         store.upsert_finding_ai("s1", "f1", {"amount": 1.5}, {}, "now")
+
+
+def test_s3_store_lists_scan_metas():
+    store = S3Store("bucket", "sg/", client=_FakeS3())
+    _new_scan(store, "s1")
+    _new_scan(store, "s2")
+    store.upsert_finding_ai("s1", "f1", {"title": "x"}, {}, "now")
+    assert sorted(m["scan_id"] for m in store.list_scan_metas()) == ["s1", "s2"]

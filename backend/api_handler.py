@@ -18,7 +18,9 @@ from datetime import datetime, timezone
 
 from scopeguard import analyze, box_client, config
 from scopeguard.packet import packet_filename, render_packet
-from scopeguard.serialize import BadRequest, apply_patch, now_iso, serialize_finding, serialize_scan
+from scopeguard.serialize import (
+    BadRequest, apply_patch, now_iso, scan_summary, serialize_finding, serialize_scan, serialize_scan_summary,
+)
 from scopeguard.store import NotFound, get_store
 
 log = logging.getLogger()
@@ -103,6 +105,25 @@ def post_scans(event: dict) -> dict:
     return _response(202, {"scan_id": scan_id, "status": "queued"})
 
 
+def list_scans(event: dict) -> dict:
+    """Saved scans, newest first, so the frontend can reopen results without re-ingesting."""
+    params = event.get("queryStringParameters") or {}
+    try:
+        limit = max(1, min(100, int(params.get("limit") or 20)))
+    except ValueError:
+        raise HttpError(400, "limit must be an integer")
+    store = get_store()
+    metas = sorted(store.list_scan_metas(), key=lambda m: m.get("started_at") or "", reverse=True)[:limit]
+    for meta in metas:
+        # Scans completed before summaries existed: compute once and backfill.
+        if meta.get("status") == "completed" and not meta.get("summary"):
+            scan = serialize_scan(store.get_scan_items(meta["scan_id"]))
+            if scan is not None:
+                meta["summary"] = scan_summary(scan)
+                store.update_scan(meta["scan_id"], summary=meta["summary"])
+    return _response(200, {"scans": [serialize_scan_summary(m) for m in metas]})
+
+
 def get_scan(scan_id: str) -> dict:
     scan = serialize_scan(get_store().get_scan_items(scan_id))
     if scan is None:
@@ -156,6 +177,7 @@ def post_packets(event: dict) -> dict:
 
 _ROUTES = [
     ("POST", re.compile(r"^/scans$"), lambda e, m: post_scans(e)),
+    ("GET", re.compile(r"^/scans$"), lambda e, m: list_scans(e)),
     ("GET", re.compile(r"^/scans/([^/]+)$"), lambda e, m: get_scan(m.group(1))),
     ("PATCH", re.compile(r"^/findings/([^/]+)$"), lambda e, m: patch_finding(e, m.group(1))),
     ("POST", re.compile(r"^/packets$"), lambda e, m: post_packets(e)),

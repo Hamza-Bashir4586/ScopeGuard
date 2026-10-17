@@ -40,6 +40,7 @@ class BaseStore:
     def update_finding_review(self, scan_id: str, finding_id: str, review: dict) -> None: ...
     def put_packet(self, scan_id: str, finding_id: str, packet: dict) -> None: ...
     def list_packets(self, scan_id: str, finding_id: str) -> list[dict]: ...
+    def list_scan_metas(self) -> list[dict]: ...
 
 
 class MemoryStore(BaseStore):
@@ -98,6 +99,10 @@ class MemoryStore(BaseStore):
     def list_packets(self, scan_id: str, finding_id: str) -> list[dict]:
         prefix = f"PACKET#{finding_id}#"
         return [i for i in self.get_scan_items(scan_id) if i["SK"].startswith(prefix)]
+
+    def list_scan_metas(self) -> list[dict]:
+        with self._lock:
+            return [copy.deepcopy(v) for (_p, s), v in self._items.items() if s == "META"]
 
 
 def _check_no_floats(value: Any) -> None:
@@ -259,6 +264,19 @@ class S3Store(BaseStore):
     def list_packets(self, scan_id: str, finding_id: str) -> list[dict]:
         keys = self._list_keys(self._base(scan_id) + f"packets/{finding_id}/")
         return [p for p in (self._get_json(k) for k in sorted(keys)) if p is not None]
+
+    def list_scan_metas(self) -> list[dict]:
+        prefixes: list[str] = []
+        kwargs: dict[str, Any] = {"Bucket": self.bucket, "Prefix": f"{self.prefix}scans/", "Delimiter": "/"}
+        while True:
+            resp = self.s3.list_objects_v2(**kwargs)
+            prefixes.extend(p["Prefix"] for p in resp.get("CommonPrefixes", []))
+            if not resp.get("IsTruncated"):
+                break
+            kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            metas = pool.map(self._get_json, [p + "meta.json" for p in prefixes])
+        return [m for m in metas if m is not None]
 
 
 @lru_cache(maxsize=1)

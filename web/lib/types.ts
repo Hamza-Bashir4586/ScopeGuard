@@ -15,6 +15,32 @@ export interface Scan {
   findings: Finding[];
 }
 
+export interface ScanSummaryCounts {
+  file_count: number;
+  finding_count: number;
+  new_count: number;
+  needs_info_count: number;
+  already_recorded_count: number;
+  potential_total: string; // sum of cost_total over "new" findings at scan time
+}
+
+// One saved scan in GET /scans (no findings; open it with GET /scans/{scan_id}).
+export interface ScanSummary {
+  scan_id: string;
+  status: ScanStatus;
+  stage: string;
+  progress: number;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
+  box_folder_id: string | null;
+  summary: ScanSummaryCounts | null; // null until the scan completes
+}
+
+export interface ListScansResponse {
+  scans: ScanSummary[]; // newest first
+}
+
 export interface SourceFile {
   box_file_id: string;
   box_version_id: string;

@@ -12,6 +12,7 @@ Shared between `backend/` (Python Lambdas) and `web/` (Next.js). Both sides must
 | Method | Path | Request body | Response |
 | --- | --- | --- | --- |
 | POST | `/scans` | `{}` (Box folder comes from server config) | `202 {"scan_id": "...", "status": "queued"}` |
+| GET | `/scans?limit=20` | – | `200 {"scans": ScanSummary[]}` newest first (saved scans; no re-ingestion) |
 | GET | `/scans/{scan_id}` | – | `200 Scan` |
 | PATCH | `/findings/{finding_id}` | `FindingPatch` | `200 Finding` (totals recomputed server-side) |
 | POST | `/packets` | `{"scan_id": "...", "finding_id": "..."}` | `201 Packet` |
@@ -33,6 +34,25 @@ interface Scan {
   finished_at: string | null;
   files: SourceFile[];
   findings: Finding[];
+}
+
+interface ScanSummary {
+  scan_id: string;
+  status: ScanStatus;
+  stage: string;
+  progress: number;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
+  box_folder_id: string | null;
+  summary: {                 // null until the scan completes
+    file_count: number;
+    finding_count: number;
+    new_count: number;
+    needs_info_count: number;
+    already_recorded_count: number;
+    potential_total: string; // sum of cost_total over "new" findings at scan time
+  } | null;
 }
 
 interface SourceFile {

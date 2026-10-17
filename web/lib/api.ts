@@ -6,6 +6,7 @@ import type {
   CreateScanResponse,
   Finding,
   FindingPatch,
+  ListScansResponse,
   Packet,
   Scan,
 } from "./types";
@@ -56,6 +57,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export interface ScopeGuardApi {
   createScan(): Promise<CreateScanResponse>;
+  listScans(limit?: number): Promise<ListScansResponse>;
   getScan(scanId: string): Promise<Scan>;
   patchFinding(findingId: string, patch: FindingPatch): Promise<Finding>;
   createPacket(req: CreatePacketRequest): Promise<Packet>;
@@ -63,6 +65,7 @@ export interface ScopeGuardApi {
 
 const httpApi: ScopeGuardApi = {
   createScan: () => request<CreateScanResponse>("POST", "/scans", {}),
+  listScans: (limit = 20) => request<ListScansResponse>("GET", `/scans?limit=${limit}`),
   getScan: (scanId) => request<Scan>("GET", `/scans/${encodeURIComponent(scanId)}`),
   patchFinding: (findingId, patch) =>
     request<Finding>("PATCH", `/findings/${encodeURIComponent(findingId)}`, patch),

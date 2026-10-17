@@ -15,6 +15,7 @@ import type {
   Question,
   Review,
   Scan,
+  ScanSummary,
   SourceFile,
 } from "./types";
 
@@ -418,6 +419,39 @@ export const mockApi: ScopeGuardApi = {
     };
     saveDb(db);
     return delay({ scan_id, status: "queued" as const });
+  },
+
+  async listScans(limit = 20) {
+    const db = loadDb();
+    const scans = Object.values(db.scans)
+      .sort((a, b) => b.started_at.localeCompare(a.started_at))
+      .slice(0, limit)
+      .map((s): ScanSummary => {
+        const v = scanView(s);
+        const count = (status: string) => v.findings.filter((f) => f.finding_status === status).length;
+        return {
+          scan_id: v.scan_id,
+          status: v.status,
+          stage: v.stage,
+          progress: v.progress,
+          error: v.error,
+          started_at: v.started_at,
+          finished_at: v.finished_at,
+          box_folder_id: "mock-folder",
+          summary:
+            v.status === "completed"
+              ? {
+                  file_count: v.files.length,
+                  finding_count: v.findings.length,
+                  new_count: count("new"),
+                  needs_info_count: count("needs_info"),
+                  already_recorded_count: count("already_recorded"),
+                  potential_total: total(v.findings.filter((f) => f.finding_status === "new").flatMap((f) => f.cost_items)),
+                }
+              : null,
+        };
+      });
+    return delay({ scans });
   },
 
   async getScan(scanId) {

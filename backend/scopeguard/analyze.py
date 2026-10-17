@@ -9,7 +9,7 @@ from typing import Optional
 
 from . import box_client, llm as llm_mod
 from .extract import extract_pages
-from .serialize import default_review, now_iso
+from .serialize import default_review, now_iso, scan_summary, serialize_scan
 from .store import BaseStore, get_store
 from .validate import Fact, box_url, check_quote, evidence_id_for, validate_finding, validate_timeline
 
@@ -103,7 +103,9 @@ def _run(scan_id: str, store: BaseStore, source, llm) -> None:
         ai["timeline"] = validate_timeline(narrative.timeline, {f.fact_id: f for f in finding_facts}, ai)
         store.upsert_finding_ai(scan_id, ai["finding_id"], ai, default_review(), now_iso())
 
-    store.update_scan(scan_id, status="completed", stage=f"Completed - {len(seen)} finding(s)", progress=100, finished_at=now_iso())
+    summary = scan_summary(serialize_scan(store.get_scan_items(scan_id)))
+    store.update_scan(scan_id, status="completed", stage=f"Completed - {len(seen)} finding(s)", progress=100,
+                      finished_at=now_iso(), summary=summary)
 
 
 def _file_item(ref: box_client.SourceFileRef, doc_type: str, page_count: int) -> dict:

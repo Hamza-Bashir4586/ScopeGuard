@@ -100,6 +100,12 @@ Resources:
             ApiId: !Ref HttpApi
             Method: POST
             Path: /scans
+        ListScans:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /scans
         GetScan:
           Type: HttpApi
           Properties:

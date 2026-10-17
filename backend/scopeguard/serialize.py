@@ -4,6 +4,7 @@ validate PATCH input. Effective values = reviewer override if present, else AI v
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Optional
 
 from .validate import cost_total, finalize_cost_items, parse_decimal, short_hash
@@ -150,6 +151,35 @@ def serialize_scan(items: list[dict]) -> Optional[dict]:
         "finished_at": meta.get("finished_at"),
         "files": sorted((serialize_file(f) for f in files), key=lambda f: f["name"].lower()),
         "findings": out_findings,
+    }
+
+
+def scan_summary(scan: dict) -> dict:
+    """Counts stored on the scan's META item when it completes (AI results, not review state)."""
+    findings = scan["findings"]
+    count = lambda status: sum(1 for f in findings if f["finding_status"] == status)
+    total = sum((Decimal(f["cost_total"]) for f in findings if f["finding_status"] == "new"), Decimal("0"))
+    return {
+        "file_count": len(scan["files"]),
+        "finding_count": len(findings),
+        "new_count": count("new"),
+        "needs_info_count": count("needs_info"),
+        "already_recorded_count": count("already_recorded"),
+        "potential_total": str(total.quantize(Decimal("0.01"))),
+    }
+
+
+def serialize_scan_summary(meta: dict) -> dict:
+    return {
+        "scan_id": meta["scan_id"],
+        "status": meta.get("status", "queued"),
+        "stage": meta.get("stage", ""),
+        "progress": max(0, min(100, _int(meta.get("progress")))),
+        "error": meta.get("error"),
+        "started_at": meta.get("started_at"),
+        "finished_at": meta.get("finished_at"),
+        "box_folder_id": meta.get("box_folder_id"),
+        "summary": meta.get("summary"),
     }
 
 

@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, FileSearch, Play, RotateCw } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Check, ChevronRight, FileSearch, History, Play, RotateCw } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
-import type { Finding, FindingStatus, Scan } from "@/lib/types";
+import type { Finding, FindingStatus, Scan, ScanSummary } from "@/lib/types";
 import { formatDateTime, formatMoney, sumMoney } from "@/lib/format";
 import { findingHref, getRememberedScanId, rememberScanId } from "@/lib/scanMemory";
 import {
@@ -17,6 +17,7 @@ import {
   ErrorBox,
   FindingStatusBadge,
   ReviewStatusBadge,
+  Badge,
   Spinner,
   cx,
   findingStatusLabel,
@@ -45,6 +46,9 @@ export default function Dashboard() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [scans, setScans] = useState<ScanSummary[] | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [listKey, setListKey] = useState(0);
 
   // Put a remembered scan id back in the URL so the address is shareable/refreshable.
   useEffect(() => {
@@ -57,13 +61,19 @@ export default function Dashboard() {
     if (!scanId) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let sawActive = false;
     const tick = async () => {
       try {
         const s = await api.getScan(scanId);
         if (cancelled) return;
         setScan(s);
         setLoadError(null);
-        if (s.status === "queued" || s.status === "running") timer = setTimeout(tick, POLL_MS);
+        if (s.status === "queued" || s.status === "running") {
+          sawActive = true;
+          timer = setTimeout(tick, POLL_MS);
+        } else if (sawActive) {
+          setListKey((k) => k + 1); // the watched scan just finished: refresh the history
+        }
       } catch (err) {
         if (!cancelled) setLoadError(errorMessage(err));
       }
@@ -78,6 +88,37 @@ export default function Dashboard() {
   const currentScan = scan && scan.scan_id === scanId ? scan : null;
   const isActive = currentScan?.status === "queued" || currentScan?.status === "running";
 
+  // Saved scans (GET /scans): reopen past ingestions without re-running them.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listScans()
+      .then((res) => {
+        if (cancelled) return;
+        setScans(res.scans);
+        setListError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setListError(errorMessage(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listKey]);
+
+  // Nothing in the URL or this browser's memory: open the most recent saved scan.
+  useEffect(() => {
+    if (scanId || !scans) return;
+    const latest = scans.find((s) => s.status === "completed") ?? scans[0];
+    if (latest) router.replace(`/?scan=${encodeURIComponent(latest.scan_id)}`);
+  }, [scanId, scans, router]);
+
+  function openScan(id: string) {
+    if (id === scanId) return;
+    setFilter("all");
+    router.push(`/?scan=${encodeURIComponent(id)}`);
+  }
+
   async function runScan() {
     setStarting(true);
     setStartError(null);
@@ -85,6 +126,7 @@ export default function Dashboard() {
       const res = await api.createScan();
       rememberScanId(res.scan_id);
       setFilter("all");
+      setListKey((k) => k + 1);
       router.push(`/?scan=${encodeURIComponent(res.scan_id)}`);
     } catch (err) {
       setStartError(errorMessage(err));
@@ -115,7 +157,9 @@ export default function Dashboard() {
       <main className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6">
         {startError && <ErrorBox message={`Could not start scan: ${startError}`} />}
 
-        {!scanId && <EmptyState onRun={runScan} starting={starting} />}
+        {!scanId && listError && <ErrorBox message={`Could not load saved scans: ${listError}`} />}
+        {!scanId && !scans && !listError && <Spinner label="Loading saved scans…" />}
+        {!scanId && (listError || scans?.length === 0) && <EmptyState onRun={runScan} starting={starting} />}
 
         {scanId && loadError && (
           <ErrorBox
@@ -151,7 +195,16 @@ export default function Dashboard() {
         )}
 
         {currentScan?.status === "completed" && (
-          <CompletedScan scan={currentScan} filter={filter} onFilter={setFilter} />
+          <CompletedScan
+            scan={currentScan}
+            filter={filter}
+            onFilter={setFilter}
+            history={<ScanHistory scans={scans} currentId={scanId} onOpen={openScan} />}
+          />
+        )}
+
+        {scanId && currentScan?.status !== "completed" && scans && scans.length > 0 && (
+          <ScanHistory scans={scans} currentId={scanId} onOpen={openScan} />
         )}
       </main>
     </div>
@@ -219,10 +272,12 @@ function CompletedScan({
   scan,
   filter,
   onFilter,
+  history,
 }: {
   scan: Scan;
   filter: Filter;
   onFilter: (f: Filter) => void;
+  history: ReactNode;
 }) {
   const findings = scan.findings;
   const stats = useMemo(() => {
@@ -255,6 +310,15 @@ function CompletedScan({
         <h1 className="text-lg font-semibold text-slate-900">Scan results</h1>
         <p className="text-xs text-slate-500">
           Completed {formatDateTime(scan.finished_at)} · {scan.files.length} files · Scan {scan.scan_id}
+        </p>
+      </div>
+
+      <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-900">
+        <History className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <p>
+          Saved results from the ingestion on {formatDateTime(scan.finished_at)}, loaded without re-reading Box. Reviews
+          and edits are kept. Use <span className="font-medium">Run scan</span> only when the project folder has
+          changed.
         </p>
       </div>
 
@@ -309,6 +373,8 @@ function CompletedScan({
           )}
         </Card>
 
+        <div className="space-y-5">
+        {history}
         <Card title={`Source files (${scan.files.length})`}>
           {scan.files.length === 0 ? (
             <p className="text-sm text-slate-500">No files were read.</p>
@@ -333,8 +399,78 @@ function CompletedScan({
             </ul>
           )}
         </Card>
+        </div>
       </div>
     </>
+  );
+}
+
+function ScanHistory({
+  scans,
+  currentId,
+  onOpen,
+}: {
+  scans: ScanSummary[] | null;
+  currentId: string | null;
+  onOpen: (scanId: string) => void;
+}) {
+  if (!scans || scans.length === 0) return null;
+  return (
+    <Card title={`Scan history (${scans.length})`}>
+      <ul className="-m-4 divide-y divide-slate-100">
+        {scans.map((s) => {
+          const current = s.scan_id === currentId;
+          return (
+            <li key={s.scan_id}>
+              <button
+                type="button"
+                onClick={() => onOpen(s.scan_id)}
+                aria-current={current ? "true" : undefined}
+                className={cx(
+                  "flex w-full items-start gap-3 px-4 py-2.5 text-left",
+                  current ? "bg-blue-50" : "hover:bg-slate-50",
+                )}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className={cx("font-medium", current ? "text-blue-900" : "text-slate-900")}>
+                      {formatDateTime(s.finished_at ?? s.started_at)}
+                    </span>
+                    {s.status !== "completed" && (
+                      <Badge tone={s.status === "failed" ? "red" : "amber"}>
+                        {s.status === "failed" ? "Failed" : `Running ${Math.round(s.progress)}%`}
+                      </Badge>
+                    )}
+                  </div>
+                  {s.summary ? (
+                    <div className="mt-0.5 text-xs text-slate-500">
+                      {s.summary.file_count} files · {s.summary.new_count} new · {s.summary.needs_info_count} needs info ·{" "}
+                      {s.summary.already_recorded_count} recorded
+                    </div>
+                  ) : (
+                    <div className="mt-0.5 truncate text-xs text-slate-500" title={s.error ?? s.stage}>
+                      {s.error ?? s.stage}
+                    </div>
+                  )}
+                </div>
+                <div className="shrink-0 text-right">
+                  {s.summary && (
+                    <div className="text-sm font-semibold tabular-nums text-slate-900">
+                      {formatMoney(s.summary.potential_total)}
+                    </div>
+                  )}
+                  {current && (
+                    <div className="flex items-center justify-end gap-1 text-xs text-blue-800">
+                      <Check className="h-3 w-3" aria-hidden /> Viewing
+                    </div>
+                  )}
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 
