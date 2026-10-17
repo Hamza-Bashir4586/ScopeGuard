@@ -415,9 +415,10 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
         return f.category_id == "billing" or (norm_ref(f.doc_reference) is not None and norm_ref(f.doc_reference) == own_ref(f))
 
     invoice_lines = _dedupe([f for f in of("invoice_line") if parse_decimal(f.amount) is not None and from_invoice_doc(f)])
-    inclusions = of("scope_inclusion")
-    exclusions = of("scope_exclusion")
     agreement_docs = {f.file_id for f in V if f.category_id == "original_agreement"}
+    # Later instructions may restate the baseline; cite the signed agreement itself.
+    inclusions = [f for f in of("scope_inclusion") if f.file_id in agreement_docs]
+    exclusions = [f for f in of("scope_exclusion") if f.file_id in agreement_docs]
     labor_rates = [f for f in of("labor_rate") if (f.file_id in agreement_docs or re.search(
         r"exhibit|agreement|contract|rate sheet", f.file_name, re.I)) and parse_decimal(f.rate) is not None]
     markup_terms = [f for f in of("pricing_basis") if "markup" in f.quote.lower() and parse_decimal(f.rate) is not None
@@ -739,7 +740,7 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
         used_identities.add(identity)
         candidates = [q for q in of("quote") if overlap(q, work) > 0
                       and (dec(q.qty) is None or dec(work.qty) is None or dec(q.qty) == dec(work.qty))]
-        procedure = of("change_procedure")[:1]
+        procedure = [f for f in of("change_procedure") if f.file_id in agreement_docs][:1]
         questions = [
             _question(identity, "missing_scope_confirmation", "Confirm whether this recorded additional work exceeds the signed scope and which instruction or change it belongs to."),
             _question(identity, "missing_authorization", "Confirm written customer approval, pricing, and whether this work has already been billed before adding a new charge."),
