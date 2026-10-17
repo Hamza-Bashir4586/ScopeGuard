@@ -1,5 +1,5 @@
 # ScopeGuard helps handle cost discrepancies in construction projects
-[The Mess Before ScopeGuard.pdf](https://github.com/user-attachments/files/33606198/The.Mess.Before.ScopeGuard.pdf)
+<img width="994" height="555" alt="Screenshot 2026-10-17 at 12 04 56 PM" src="https://github.com/user-attachments/assets/451583f3-d17a-4b3a-b728-e92acfc6ea43" />
 
 
 ScopeGuard helps construction companies audit whether recorded project work and changes have been accounted
