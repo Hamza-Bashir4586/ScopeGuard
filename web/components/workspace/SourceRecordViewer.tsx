@@ -10,9 +10,15 @@ import styles from "./workspace.module.css";
 export interface SourceViewerRequest { sources: SourceRef[]; scanId?: string; findingId?: string; }
 
 function highlighted(text: string, quotes: string[]): ReactNode {
-  const ranges = quotes.filter(Boolean).map((quote) => ({ start: text.indexOf(quote), quote })).filter((match) => match.start >= 0).sort((a, b) => a.start - b.start);
+  // PDF line wrapping can differ from the verified quote's normalized whitespace.
+  // Match flexible whitespace while highlighting the exact original page characters.
+  const ranges = quotes.filter(Boolean).flatMap((quote) => {
+    const pattern = quote.trim().split(/\s+/).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+");
+    const match = new RegExp(pattern, "u").exec(text);
+    return match ? [{ start: match.index, end: match.index + match[0].length }] : [];
+  }).sort((a, b) => a.start - b.start);
   const pieces: ReactNode[] = []; let cursor = 0;
-  ranges.forEach(({ start, quote }) => { if (start < cursor) return; pieces.push(text.slice(cursor, start), <mark key={`${start}-${quote.length}`}>{quote}</mark>); cursor = start + quote.length; });
+  ranges.forEach(({ start, end }) => { if (start < cursor) return; pieces.push(text.slice(cursor, start), <mark key={`${start}-${end}`}>{text.slice(start, end)}</mark>); cursor = end; });
   pieces.push(text.slice(cursor)); return pieces;
 }
 
