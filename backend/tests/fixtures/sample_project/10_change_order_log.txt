@@ -1,7 +1,0 @@
-CHANGE ORDER LOG - Keystone Interiors, Inc. / Harbor View MOB
-Updated: 2026-03-20
-
-CO No. | Date       | Description                                                   | Amount    | Status
-CO-001 | 2026-02-04 | Add 2 hr rated shaft wall at elevator 2                       | $4,215.00 | Approved
-CO-002 | 2026-02-18 | Owner-requested door relocation, Level 3 suite 310            | $960.00   | Approved
-CO-003 | 2026-03-05 | In-wall blocking for exam room equipment, Level 1 rooms 104-112 | $1,840.00 | Approved

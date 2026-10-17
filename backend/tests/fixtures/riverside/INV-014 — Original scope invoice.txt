@@ -1,0 +1,6 @@
+Invoice INV-014
+Invoice date: Oct 13, 2026.
+Bill to: Northline Builders. Project: Riverside Office Renovation.
+Original scope billing: $125,000.
+Retainage of $6,250 (5%) is withheld per the agreement payment terms.
+No separate CO-001 charge is listed in this fictional invoice.

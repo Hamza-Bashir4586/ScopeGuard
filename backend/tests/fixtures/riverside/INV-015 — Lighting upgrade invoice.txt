@@ -1,0 +1,5 @@
+Invoice INV-015
+Invoice date: Oct 14, 2026.
+Bill to: Northline Builders. Project: Riverside Office Renovation.
+CO-002 lighting upgrade: $1,500.
+This previously invoiced upgrade is distinct from the two additional fixtures proposed in SI-009. No CO-001 charge is listed.

@@ -1,8 +1,0 @@
-ARCHITECT'S SUPPLEMENTAL INSTRUCTION ASI-03
-Project: Harbor View Medical Office Building
-Date: 2026-03-09
-Reference: RFI-014 (Level 2 corridor duct conflict)
-
-Description: Add a gypsum board soffit, 24 in. wide x 18 in. deep, along the Level 2 corridor from gridline C to gridline F to enclose the relocated supply duct.
-Construction: 3-5/8 in. 20 ga metal stud framing with 5/8 in. Type X gypsum board, Level 4 finish.
-This ASI supplements drawing A-501; no other changes.

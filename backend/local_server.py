@@ -1,21 +1,25 @@
 """Local dev server: adapts plain HTTP requests into API Gateway HTTP API (v2) events and
 calls the same api_handler.handler used in Lambda. No AWS or Box required.
 
-    cd backend && STORE=memory BOX_MODE=local LLM_MODE=fake python3.12 local_server.py
+    cd backend && STORE=memory BOX_MODE=local LLM_MODE=fake .venv/bin/python local_server.py
 
-Those three settings are also the defaults when this script is run directly.
-LOCAL_DOCS_DIR defaults to ../demo-data, or the sample fixtures if demo-data has no documents.
+Those three settings are also the defaults when this script is run directly. Serves every v2 route, including
+multipart uploads (request bodies are passed base64-encoded, as API Gateway does for binary content) and binary
+PDF/text responses (isBase64Encoded proxy responses are decoded), with CORS.
+LOCAL_DOCS_DIR defaults to ../demo-data/riverside (or the Riverside text fixtures if that folder is empty).
+Uploads and "Save to Box" write into that folder (outputs go to its "ScopeGuard Packets/" subfolder).
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 os.environ.setdefault("STORE", "memory")
 os.environ.setdefault("BOX_MODE", "local")
@@ -30,6 +34,7 @@ CORS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
     "Access-Control-Allow-Headers": "content-type",
+    "Access-Control-Expose-Headers": "content-disposition",
     "Access-Control-Max-Age": "600",
 }
 
@@ -54,7 +59,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         url = urlsplit(self.path)
         length = int(self.headers.get("Content-Length") or 0)
-        body = self.rfile.read(length).decode("utf-8") if length else None
+        raw = self.rfile.read(length) if length else b""
         now = time.time()
         event = {
             "version": "2.0",
@@ -62,6 +67,7 @@ class Handler(BaseHTTPRequestHandler):
             "rawPath": url.path,
             "rawQueryString": url.query,
             "headers": {k.lower(): v for k, v in self.headers.items()},
+            "queryStringParameters": dict(parse_qsl(url.query, keep_blank_values=True)) or None,
             "requestContext": {
                 "http": {"method": self.command, "path": url.path, "protocol": "HTTP/1.1", "sourceIp": self.client_address[0],
                          "userAgent": self.headers.get("User-Agent", "")},
@@ -69,12 +75,13 @@ class Handler(BaseHTTPRequestHandler):
                 "stage": "$default",
                 "timeEpoch": int(now * 1000),
             },
-            "body": body,
-            "isBase64Encoded": False,
+            "body": base64.b64encode(raw).decode("ascii") if raw else None,
+            "isBase64Encoded": bool(raw),
         }
         resp = api_handler.handler(event, None)
         out = resp.get("body") or ""
-        self._send(int(resp.get("statusCode", 200)), resp.get("headers") or {}, out.encode("utf-8"))
+        data = base64.b64decode(out) if resp.get("isBase64Encoded") else out.encode("utf-8")
+        self._send(int(resp.get("statusCode", 200)), resp.get("headers") or {}, data)
 
     do_GET = do_POST = do_PATCH = do_PUT = do_DELETE = do_OPTIONS = _dispatch
 

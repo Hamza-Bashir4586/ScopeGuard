@@ -1,14 +1,11 @@
 # demo-data
 
-Put the **fictional demo project documents** for ScopeGuard here (`.pdf`, `.txt`, `.md`): subcontract / scope,
-labor rate sheet, GC instructions (emails, ASIs, RFI responses), revised specs, daily reports, timesheets,
-material receipts, and the existing change-order log.
+Fictional demo records for ScopeGuard. Use only fictional names, companies and amounts.
 
-- Local dev (`BOX_MODE=local`) reads this folder non-recursively. This README is ignored. Packets generated
-  locally are written to `demo-data/ScopeGuard Packets/` (gitignored).
-- While this folder has no documents, the local server falls back to the sample fixtures in
-  `backend/tests/fixtures/sample_project/`.
-- For the deployed app, upload the **same files** to the Box folder configured as `BoxFolderId`
-  (ScopeGuard creates a `ScopeGuard Packets` subfolder there for exported PDFs).
-
-Use only fictional names, companies and amounts.
+- `riverside/` - the Riverside Office Renovation record set as text-readable PDFs, generated from
+  `backend/tests/fixtures/riverside/*.txt` by `backend/scripts/make_demo_pdfs.py`. Re-run the script after editing a
+  fixture.
+- Local dev (`BOX_MODE=local`) reads `demo-data/riverside/` non-recursively by default (`LOCAL_DOCS_DIR` overrides it).
+  Uploads and locally saved invoice packs are written into that folder (`ScopeGuard Packets/` is gitignored).
+- For the deployed app, upload the **same files, with the same names** to the Box folder configured as `BoxFolderId`.
+  ScopeGuard saves generated invoice packs in a `ScopeGuard Packets` subfolder, which is never treated as input.

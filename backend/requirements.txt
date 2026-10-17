@@ -1,5 +1,7 @@
 # Runtime dependencies vendored into the Lambda package by `sam build`.
-# boto3/botocore are provided by the Lambda Python 3.12 runtime (see requirements-dev.txt).
+# boto3 is vendored (not taken from the Lambda runtime) because S3 conditional writes need PutObject IfMatch /
+# IfNoneMatch support (boto3 >= 1.35).
+boto3>=1.35
 box-sdk-gen>=1.10,<2
 pypdf>=5.0,<7
 fpdf2>=2.8,<3

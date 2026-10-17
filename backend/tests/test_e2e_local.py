@@ -1,149 +1,78 @@
-"""End-to-end through api_handler with memory store, local Box and fake LLM."""
+"""End-to-end through api_handler against the generated demo PDFs (memory store, local folder, fake LLM)."""
 
 import json
-import time
 
 import api_handler
+from tests.conftest import by_code
 
 
-def call(method, path, body=None):
-    event = {"version": "2.0", "rawPath": path, "requestContext": {"http": {"method": method, "path": path}},
-             "body": json.dumps(body) if body is not None else None, "isBase64Encoded": False}
-    resp = api_handler.handler(event, None)
-    return resp["statusCode"], (json.loads(resp["body"]) if resp["body"] else None)
+def test_full_demo_flow_on_pdfs(pdf_env, api):
+    _, projects = api("GET", "/projects")
+    assert projects["projects"][0]["review_label"] == "Not audited yet"
+    _, detail = api("GET", "/projects/riverside")
+    assert detail["audit_action"] == "run" and detail["agreement"]["source"]["file_name"] == "Signed scope and agreement.pdf"
+
+    scan = api.audit(cutoff_date="2026-10-16", request_id="e2e")
+    assert scan["status"] == "completed" and scan["coverage"]["complete"], scan["coverage"]
+    f = by_code(scan)
+    assert [(c, f[c]["finding_type"], f[c]["amount"]) for c in sorted(f)] == [
+        ("D-001", "approved_unbilled", "8500.00"), ("D-002", "scope_change_proposed", "1600.00"),
+        ("D-003", "authorization_unresolved", "900.00")]
+    existing = {(x["kind"], x["reference"]): x["amount"] for x in scan["existing_items"]}
+    assert existing == {("invoice_balance", "INV-015"): "500.00", ("retainage", "INV-014"): "6250.00",
+                        ("approved_billed", "CO-002"): "1500.00"}
+    assert all(e["verified"] for x in scan["findings"] for g in x["evidence_groups"] for e in g["evidence"])
+
+    _, detail = api("GET", "/projects/riverside")
+    assert detail["audit_action"] == "refresh" and detail["agreement"]["status"] == "refreshed"
+    assert detail["review_label"] == "3 findings to review"
+    assert detail["agreement"]["contract_value"] == "125000.00" and detail["agreement"]["signed_date"] == "2026-09-28"
+
+    # review, acknowledge, select all three
+    sid = scan["scan_id"]
+    api("PATCH", f"/findings/{f['D-001']['finding_id']}", {"scan_id": sid, "status": "reviewed", "internal_comment": "ok"})
+    api("PATCH", f"/findings/{f['D-002']['finding_id']}", {"scan_id": sid, "status": "reviewed"})
+    api("PATCH", f"/findings/{f['D-003']['finding_id']}", {"scan_id": sid, "status": "reviewed", "acknowledge_authorization": True})
+    _, draft = api("PATCH", "/projects/riverside/invoice-draft",
+                   {"expected_revision": 0, "scan_id": sid, "selected_work_item_ids": [f[c]["work_item_id"] for c in ("D-001", "D-002", "D-003")]})
+    assert draft["subtotal"] == "11000.00" and draft["can_generate"]
+    status, gen = api("POST", "/projects/riverside/invoice-generations", {"request_id": "g1", "expected_revision": draft["revision"]})
+    assert status == 201 and gen["subtotal"] == "11000.00"
+    status, pdf, _ = api("GET", gen["content_path"])
+    assert status == 200 and pdf.startswith(b"%PDF")
+    status, saved = api("POST", f"/projects/riverside/invoice-generations/{gen['generation_id']}/save-to-box", {})
+    assert status == 200 and saved["box"]
+    assert (pdf_env / "ScopeGuard Packets" / gen["file_name"]).read_bytes() == pdf
+
+    # v1 POST /packets still works for a reviewed finding
+    status, packet = api("POST", "/packets", {"scan_id": sid, "finding_id": f["D-001"]["finding_id"]})
+    assert status == 201 and packet["box_url"].endswith(packet["box_file_id"]) and packet["created_at"].endswith("Z")
+    _, d = api("GET", f"/scans/{sid}")
+    assert d["summary"]["to_review_count"] == 0
+    _, cards = api("GET", "/projects")
+    assert cards["projects"][0]["review_label"] == "All reviewed"
 
 
-def wait_for_scan(scan_id, timeout=30):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        status, scan = call("GET", f"/scans/{scan_id}")
-        assert status == 200
-        if scan["status"] in ("completed", "failed"):
-            return scan
-        time.sleep(0.1)
-    raise AssertionError("scan did not finish")
+def test_packets_require_review_and_errors(local_env, api):
+    scan = api.audit()
+    fid = by_code(scan)["D-002"]["finding_id"]
+    status, err = api("POST", "/packets", {"scan_id": scan["scan_id"], "finding_id": fid})
+    assert status == 409 and err["code"] == "not_reviewed"
+    assert api("POST", "/packets", {"scan_id": "s"})[0] == 400
+    assert api("POST", "/packets", {"scan_id": "nope", "finding_id": "x"})[0] == 404
 
 
-def test_full_flow(local_env):
-    status, body = call("POST", "/scans", {})
-    assert status == 202 and body["status"] == "queued" and body["scan_id"]
-    scan_id = body["scan_id"]
-
-    scan = wait_for_scan(scan_id)
-    assert scan["status"] == "completed", scan["error"]
-    assert scan["progress"] == 100 and scan["finished_at"] and scan["error"] is None
-    assert len(scan["files"]) == 10
-    assert {f["doc_type"] for f in scan["files"]} >= {"subcontract", "rate_sheet", "instruction", "daily_report", "timesheet",
-                                                      "receipt", "change_order_log", "spec_revision"}
-    assert all(f["box_url"] == f"https://app.box.com/file/{f['box_file_id']}" for f in scan["files"])
-
-    by_status = {f["finding_status"]: f for f in scan["findings"]}
-    assert set(by_status) == {"new", "already_recorded", "needs_info"}
-
-    new = by_status["new"]
-    assert new["cost_total"] == "3297.51"
-    assert [c["amount"] for c in new["cost_items"]] == ["2255.00", "612.40", "430.11"]
-    assert all(e["verified"] for e in new["evidence"])
-    excl = next(e for e in new["evidence"] if e["quote"].startswith("2.2 Framing"))
-    assert excl["page"] == 2  # page number corrected by the quote check
-
-    rec = by_status["already_recorded"]
-    assert rec["co_match"]["co_number"] == "CO-003" and rec["co_match"]["amount"] == "1840.00"
-
-    info = by_status["needs_info"]
-    kinds = {q["kind"] for q in info["questions"]}
-    assert {"missing_authorization", "missing_quantity", "unclear_scope"} <= kinds
-    assert any(not e["verified"] for e in info["evidence"])
-
-    fid = new["finding_id"]
-    # packet before confirmation -> 409
-    status, err = call("POST", "/packets", {"scan_id": scan_id, "finding_id": fid})
-    assert status == 409 and "error" in err
-
-    # PATCH: confirm + edit draft + edit a cost item -> total recomputed server-side
-    items = [dict(c) for c in new["cost_items"]]
-    items[0]["qty"] = "30"  # 30 h × $82.00 = 2460.00
-    status, f = call("PATCH", f"/findings/{fid}", {"scan_id": scan_id, "status": "confirmed",
-                                                    "draft": "Reviewed narrative.", "cost_items": items,
-                                                    "question_resolutions": {}})
-    assert status == 200
-    assert f["review"]["status"] == "confirmed" and f["draft"] == "Reviewed narrative."
-    assert f["cost_items"][0]["amount"] == "2460.00"
-    assert f["cost_items"][0]["formula"] == "30 h × $82.00/h = $2,460.00"
-    # markup = 15% × (2460.00 + 612.40) = 460.86
-    assert f["cost_items"][2]["amount"] == "460.86"
-    assert f["cost_total"] == "3533.26"
-    assert f["ai_cost_items"][0]["amount"] == "2255.00"  # AI values untouched
-
-    # POST /packets -> PDF in "<dir>/ScopeGuard Packets/"
-    status, packet = call("POST", "/packets", {"scan_id": scan_id, "finding_id": fid})
-    assert status == 201
-    assert packet["box_url"] == f"https://app.box.com/file/{packet['box_file_id']}" and packet["created_at"].endswith("Z")
-    pdfs = list((local_env / "ScopeGuard Packets").glob("*.pdf"))
-    assert len(pdfs) == 1 and pdfs[0].read_bytes().startswith(b"%PDF")
-    from pypdf import PdfReader
-
-    text = "\n".join(p.extract_text() for p in PdfReader(str(pdfs[0])).pages)
-    assert "not a determination of entitlement" in text
-    assert "Reviewed narrative." in text and "$3,533.26" in text
-
-    _, scan = call("GET", f"/scans/{scan_id}")
-    again = next(x for x in scan["findings"] if x["finding_id"] == fid)
-    assert again["packets"] == [packet]
-
-    # a rescan folder listing must skip the packets subfolder
-    from scopeguard.box_client import get_source
-
-    assert all(not r.name.endswith(".pdf") for r in get_source().list_files())
-
-
-def test_errors(local_env):
-    assert call("GET", "/scans/nope") == (404, {"error": "Scan nope not found"})
-    status, body = call("PATCH", "/findings/f_x", {})
-    assert status == 400 and "scan_id" in body["error"]
-    status, body = call("PATCH", "/findings/f_x", {"scan_id": "s"})
-    assert status == 404
-    status, body = call("POST", "/packets", {"scan_id": "s"})
-    assert status == 400
+def test_router_errors_and_cors(local_env, api):
+    assert api("GET", "/nothing")[0] == 404
+    status, err = api("DELETE", "/projects")
+    assert status == 405 and err["code"] == "method_not_allowed"
     event = {"rawPath": "/scans", "requestContext": {"http": {"method": "POST"}}, "body": "{bad"}
     resp = api_handler.handler(event)
-    assert resp["statusCode"] == 400 and "error" in json.loads(resp["body"])
-    assert call("GET", "/nothing")[0] == 404
-    assert api_handler.handler({"rawPath": "/scans", "requestContext": {"http": {"method": "OPTIONS"}}})["statusCode"] == 204
-
-
-def test_list_saved_scans(local_env):
-    status, body = call("GET", "/scans")
-    assert status == 200 and body == {"scans": []}
-
-    first = call("POST", "/scans", {})[1]["scan_id"]
-    wait_for_scan(first)
-    time.sleep(0.01)  # distinct started_at
-    second = call("POST", "/scans", {})[1]["scan_id"]
-    wait_for_scan(second)
-
-    status, body = call("GET", "/scans")
-    assert status == 200
-    scans = body["scans"]
-    assert [s["scan_id"] for s in scans] == [second, first]  # newest first
-    assert scans[0]["status"] == "completed" and scans[0]["finished_at"]
-    assert scans[0]["summary"] == {
-        "file_count": 10, "finding_count": 3, "new_count": 1, "needs_info_count": 1,
-        "already_recorded_count": 1, "potential_total": "3297.51",
-    }
-    assert "findings" not in scans[0]  # summaries only; GET /scans/{id} has the details
-
-    event = {"rawPath": "/scans", "queryStringParameters": {"limit": "1"}, "requestContext": {"http": {"method": "GET"}}}
-    assert [s["scan_id"] for s in json.loads(api_handler.handler(event)["body"])["scans"]] == [second]
-
-
-def test_list_backfills_summary_for_old_scans(local_env):
-    from scopeguard.store import get_store
-
-    scan_id = call("POST", "/scans", {})[1]["scan_id"]
-    wait_for_scan(scan_id)
-    get_store().update_scan(scan_id, summary=None)  # as if completed before summaries existed
-    scans = call("GET", "/scans")[1]["scans"]
-    assert scans[0]["summary"]["finding_count"] == 3
-    meta = next(i for i in get_store().get_scan_items(scan_id) if i["SK"] == "META")
-    assert meta["summary"]["finding_count"] == 3
+    assert resp["statusCode"] == 400 and json.loads(resp["body"])["error"]
+    assert resp["headers"]["Access-Control-Allow-Origin"] == "*"
+    opt = api_handler.handler({"rawPath": "/projects/riverside/records", "requestContext": {"http": {"method": "OPTIONS"}}})
+    assert opt["statusCode"] == 204 and "PATCH" in opt["headers"]["Access-Control-Allow-Methods"]
+    # rawQueryString is honoured when queryStringParameters is absent (local server / some proxies)
+    resp = api_handler.handler({"rawPath": "/projects/riverside/records", "rawQueryString": "category_id=billing",
+                                "requestContext": {"http": {"method": "GET"}}})
+    assert len(json.loads(resp["body"])["records"]) == 2

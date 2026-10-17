@@ -1,8 +1,0 @@
-KEYSTONE INTERIORS - WEEKLY TIMESHEET
-Project: Harbor View MOB     Week ending: 2026-03-15
-
-Date        Cost code / Task                         Workers                          Hours
-2026-03-12  EXTRA - L2 corridor soffit (ASI-03)      L. Ortiz, M. Chen, R. Dawson     Total 19.5
-2026-03-12  BASE - L3 partitions                     K. Banks, T. Nguyen              Total 16.0
-2026-03-13  EXTRA - L2 corridor soffit (ASI-03)      M. Chen, R. Dawson               Total 8.0
-2026-03-13  BASE - L1 exam room blocking (CO-003)    L. Ortiz, K. Banks               Total 12.0

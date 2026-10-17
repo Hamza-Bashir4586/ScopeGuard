@@ -1,3 +1,6 @@
+> **Superseded by [api-contract-v2.md](api-contract-v2.md)** (project audit + invoice draft). This v1 document is kept for
+> history; only `POST /packets` remains implemented with a v1-style request (it now renders a v2 finding).
+
 # ScopeGuard API contract
 
 Shared between `backend/` (Python Lambdas) and `web/` (Next.js). Both sides must match this file.

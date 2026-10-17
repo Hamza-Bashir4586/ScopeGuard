@@ -1,8 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  ScopeGuard - AI assistant for construction subcontractors. Finds potential extra work missing from
-  the change-order log in a Box project folder and drafts source-cited change-request packets.
+  ScopeGuard - audits a construction project's Box records for approved or recorded work missing from billing,
+  keeps invoice balances, payments and retainage separate, and prepares an evidence-backed supplemental invoice
+  draft for customer sign-off (docs/api-contract-v2.md).
 
 Parameters:
   BoxFolderId:
@@ -38,6 +39,15 @@ Resources:
   DataBucket:
     Type: AWS::S3::Bucket
     Properties:
+      LifecycleConfiguration:
+        Rules:
+          # Generated invoice PDFs are temporary in S3 (tagged on upload); Box keeps the saved copy [INV-09].
+          - Id: ExpireTemporaryGeneratedPdfs
+            Status: Enabled
+            ExpirationInDays: 1
+            TagFilters:
+              - Key: scopeguard-temporary
+                Value: "true"
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -78,10 +88,10 @@ Resources:
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Description: ScopeGuard HTTP API (scans, findings review, packets)
+      Description: ScopeGuard HTTP API (projects, records, audits, reviews, invoice drafts and generations)
       Handler: api_handler.handler
       Timeout: 29
-      MemorySize: 512
+      MemorySize: 1024
       Environment:
         Variables:
           WORKER_FUNCTION_NAME: !Ref WorkerFunction
@@ -89,11 +99,53 @@ Resources:
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref DataBucket
+        - Statement:
+            - Sid: TagTemporaryGeneratedPdfs
+              Effect: Allow
+              Action:
+                - s3:PutObjectTagging
+              Resource: !Sub ${DataBucket.Arn}/*
         - LambdaInvokePolicy:
             FunctionName: !Ref WorkerFunction
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Ref BoxSecret
       Events:
+        ListProjects:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /projects
+        GetProject:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /projects/{project_id}
+        ListRecords:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /projects/{project_id}/records
+        UploadRecord:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /projects/{project_id}/records
+        GetRecordContent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /projects/{project_id}/records/{file_id}/content
+        GetRecordPage:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /projects/{project_id}/records/{file_id}/pages/{page}
         CreateScan:
           Type: HttpApi
           Properties:
@@ -118,6 +170,42 @@ Resources:
             ApiId: !Ref HttpApi
             Method: PATCH
             Path: /findings/{finding_id}
+        GetInvoiceDraft:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /projects/{project_id}/invoice-draft
+        PatchInvoiceDraft:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: PATCH
+            Path: /projects/{project_id}/invoice-draft
+        CreateInvoiceGeneration:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /projects/{project_id}/invoice-generations
+        GetInvoiceGeneration:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /projects/{project_id}/invoice-generations/{generation_id}
+        GetInvoiceGenerationContent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /projects/{project_id}/invoice-generations/{generation_id}/content
+        SaveInvoiceGenerationToBox:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /projects/{project_id}/invoice-generations/{generation_id}/save-to-box
         CreatePacket:
           Type: HttpApi
           Properties:
@@ -138,6 +226,8 @@ Resources:
           - OPTIONS
         AllowHeaders:
           - content-type
+        ExposeHeaders:
+          - content-disposition
         MaxAge: 600
 
 Outputs:

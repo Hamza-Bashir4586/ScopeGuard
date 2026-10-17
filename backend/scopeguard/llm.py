@@ -1,9 +1,12 @@
-"""LLM access for the three analysis steps.
+"""LLM access for the analysis steps.
 
-* BedrockLLM - boto3 bedrock-runtime Converse API with tool use for structured output,
-               validated with pydantic v2, one retry that includes the validation error.
-* FakeLLM    - deterministic, rule-based outputs over the provided text (LLM_MODE=fake),
-               tuned to the sample fixtures so the frontend can be built end-to-end.
+* BedrockLLM - boto3 bedrock-runtime Converse API with tool use for structured output, validated with pydantic v2,
+               one bounded retry that includes the validation error [AI-01, AI-08].
+* FakeLLM    - deterministic, rule-based outputs over the supplied text (LLM_MODE=fake). It reproduces the
+               fictional Riverside walkthrough (backend/tests/fixtures/riverside, demo-data/riverside) with verbatim
+               quotes so Python verification passes, and returns nothing invented for unknown documents.
+
+Steps: (1) per record: classify + extract typed facts with quotes/pages; (2) across facts: propose work-item links.
 """
 
 from __future__ import annotations
@@ -13,23 +16,14 @@ import json
 import logging
 import re
 import threading
+from datetime import datetime
 from typing import Any, Optional, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
 from . import config, prompts
-from .models import (
-    DocumentExtraction,
-    ExtractedFact,
-    FindingNarrative,
-    FindingsProposal,
-    ProposedCostItem,
-    ProposedEvidence,
-    ProposedFinding,
-    ProposedQuestion,
-    ProposedTimelineEntry,
-)
-from .validate import Fact
+from .models import DocumentExtraction, ExtractedFact, ProposedLink, WorkItemLinks
+from .reconcile import Fact
 
 log = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
@@ -40,9 +34,10 @@ class LLMError(RuntimeError):
 
 
 class LLM(Protocol):
+    label: str
+
     def extract_document(self, name: str, pages: list[str]) -> DocumentExtraction: ...
-    def propose_findings(self, facts: list[Fact], documents: list[dict]) -> FindingsProposal: ...
-    def draft_narrative(self, finding: dict, facts: list[Fact]) -> FindingNarrative: ...
+    def propose_links(self, facts: list[Fact]) -> WorkItemLinks: ...
 
 
 # ============================================================ schema helpers
@@ -102,19 +97,19 @@ class BedrockLLM:
             self._client = get_bedrock_client()
         return self._client
 
+    @property
+    def label(self) -> str:
+        return f"bedrock:{self.model_id}"
+
     # -- public steps
 
     def extract_document(self, name: str, pages: list[str]) -> DocumentExtraction:
         return self.structured(prompts.EXTRACT_SYSTEM, prompts.extract_user(name, pages), DocumentExtraction,
-                               "record_document", "Record the document classification and extracted facts.")
+                               "record_document", "Record the record classification and extracted facts.")
 
-    def propose_findings(self, facts: list[Fact], documents: list[dict]) -> FindingsProposal:
-        return self.structured(prompts.FINDINGS_SYSTEM, prompts.findings_user([f.prompt_view() for f in facts], documents),
-                               FindingsProposal, "record_findings", "Record the proposed findings (potential extra work).")
-
-    def draft_narrative(self, finding: dict, facts: list[Fact]) -> FindingNarrative:
-        return self.structured(prompts.NARRATIVE_SYSTEM, prompts.narrative_user(finding, [f.prompt_view() for f in facts]),
-                               FindingNarrative, "record_narrative", "Record the change-request narrative and timeline.")
+    def propose_links(self, facts: list[Fact]) -> WorkItemLinks:
+        return self.structured(prompts.LINK_SYSTEM, prompts.links_user([f.prompt_view() for f in facts]), WorkItemLinks,
+                               "record_links", "Record proposed links between facts describing the same work item.")
 
     # -- core
 
@@ -184,244 +179,177 @@ class BedrockLLM:
 
 # ============================================================ Fake (deterministic)
 
-_DATE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
-_MONEY = re.compile(r"\$\s?(\d[\d,]*\.\d{2})")
+_REF = re.compile(r"\b(?:CO|SI|INV|REM)-\d+(?:-\d+)*\b")
+_NUMS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+         "eleven": 11, "twelve": 12}
 
 
-def _doc_type_from_name(name: str) -> str:
-    n = name.lower()
-    for keys, dtype in (
-        (("change_order_log", "change-order-log", "co_log", "co log"), "change_order_log"),
-        (("rate",), "rate_sheet"),
-        (("subcontract",), "subcontract"),
-        (("timesheet", "time_sheet"), "timesheet"),
-        (("daily",), "daily_report"),
-        (("receipt", "invoice"), "receipt"),
-        (("asi", "spec", "revis"), "spec_revision"),
-        (("email", "instruction", "directive", "rfi", "letter"), "instruction"),
-        (("scope",), "scope"),
-    ):
-        if any(k in n for k in keys):
-            return dtype
-    return "other"
+def _num(word: str) -> str:
+    w = word.strip().lower()
+    return str(_NUMS[w]) if w in _NUMS else w.replace(",", "")
 
 
-def _topic(line: str) -> Optional[str]:
-    low = line.lower()
-    if "soffit" in low:
-        return "L2 corridor soffit"
-    if "blocking" in low:
-        return "Exam room in-wall blocking"
-    if "lobby" in low:
-        return "L1 lobby drywall repair"
+def _money(s: str) -> str:
+    return s.replace(",", "")
+
+
+def _date(s: str) -> Optional[str]:
+    for fmt in ("%b %d, %Y", "%B %d, %Y"):
+        try:
+            return datetime.strptime(s.strip(), fmt).date().isoformat()
+        except ValueError:
+            continue
     return None
 
 
-def _clean(line: str) -> str:
-    return re.sub(r"^\s*[-*•]\s*", "", line).strip()
+def paragraphs(page: str) -> list[str]:
+    """Re-join wrapped PDF lines: a line continues the previous one unless the previous ended a sentence.
+    The first line of a page is its title and stands alone."""
+    lines = [" ".join(ln.split()) for ln in page.splitlines() if ln.strip()]
+    out: list[str] = []
+    for i, ln in enumerate(lines):
+        if out and i > 1 and not re.search(r"[.!?:)]$", out[-1]):
+            out[-1] += " " + ln
+        else:
+            out.append(ln)
+    return out
+
+
+def sentences(page: str) -> list[str]:
+    out = []
+    for para in paragraphs(page):
+        out.extend(s.strip() for s in re.split(r"(?<=[.;])\s+(?=[A-Z])", para) if s.strip())
+    return out
+
+
+_CATEGORY_BY_TITLE = [
+    (r"subcontract|agreement|exhibit [a-z]", "original_agreement", "Original agreement"),
+    (r"change order", "approvals", "Approvals"),
+    (r"completion record|timesheet|daily report", "field_records", "Field records"),
+    (r"^invoice", "billing", "Billing"),
+    (r"site instruction|directive", "change_instructions", "Change instructions"),
+    (r"quotation|proposal", "pricing", "Pricing"),
+    (r"remittance|payment", "payments", "Payments"),
+]
 
 
 class FakeLLM:
-    """Deterministic stand-in for Bedrock. Produces realistic output for the sample fixtures
-    (one new change, one already recorded, one needing info) and generic output otherwise."""
+    """Deterministic stand-in for Bedrock (see module docstring)."""
 
-    # ---- step 1
+    label = "fake"
 
     def extract_document(self, name: str, pages: list[str]) -> DocumentExtraction:
-        doc_type = _doc_type_from_name(name)
-        full = "\n".join(pages)
-        m = _DATE.search(full)
-        doc_date = m.group(1) if m else None
-        person = None
-        pm = re.search(r"^From:\s*([^<\n]+)", full, re.M)
-        if pm:
-            person = pm.group(1).strip()
+        title = paragraphs(pages[0])[0] if pages and paragraphs(pages[0]) else name
+        category_id, category_label = "unclassified", "Unclassified"
+        for pattern, cid, clabel in _CATEGORY_BY_TITLE:
+            if re.search(pattern, title, re.I):
+                category_id, category_label = cid, clabel
+                break
+        m = _REF.search(title)
+        doc_ref = m.group(0) if m else None
+        full = " ".join(" ".join(p.split()) for p in pages)
+        ctx_refs = re.findall(r"[Rr]eference:? ((?:CO|SI)-\d+)", full)
+        doc_date = None
+        dm = re.search(r"(?:Invoice date|Date|Agreement date|Submitted): (\w+ \d{1,2}, \d{4})", full)
+        if dm:
+            doc_date = _date(dm.group(1))
         facts: list[ExtractedFact] = []
-        # The fake (like a real model sometimes does) "forgets" page breaks in the subcontract and cites page 1;
-        # Python's quote check corrects the page number.
-        page_iter = [(1, full)] if doc_type == "subcontract" else list(enumerate(pages, start=1))
-        for page_no, text in page_iter:
-            for raw in text.splitlines():
-                line = raw.strip()
-                if len(line) < 12:
-                    continue
-                facts.extend(self._facts_for_line(doc_type, line, page_no, doc_date, person))
-        return DocumentExtraction(doc_type=doc_type, doc_summary=f"{doc_type.replace('_', ' ').title()}: {name}", doc_date=doc_date, facts=facts)
+        ctx = {"doc_ref": doc_ref, "refs": ctx_refs, "entity": None}
+        for page_no, text in enumerate(pages, start=1):
+            for s in sentences(text):
+                fact = self._fact(s, page_no, ctx)
+                if fact is not None:
+                    facts.append(fact)
+        return DocumentExtraction(category_id=category_id, category_label=category_label, doc_reference=doc_ref,
+                                  doc_date=doc_date, doc_summary=f"{category_label}: {title}", facts=facts)
 
-    def _facts_for_line(self, doc_type: str, line: str, page: int, doc_date: Optional[str], person: Optional[str]) -> list[ExtractedFact]:
-        low = line.lower()
-        ld = _DATE.search(line)
-        date = ld.group(1) if ld else doc_date
-        base = dict(page=page, quote=_clean(line), summary=_clean(line), date=date, topic=_topic(line))
-        out: list[ExtractedFact] = []
-        if doc_type in ("subcontract", "scope"):
-            if not re.match(r"^\d+\.\d+\s", line):
-                return []
-            if "markup" in low:
-                pct = re.search(r"(\d+(?:\.\d+)?)\s*%", line)
-                out.append(ExtractedFact(kind="markup", rate=pct.group(1) if pct else None, unit="%", **base))
-            elif "exclude" in low:
-                out.append(ExtractedFact(kind="scope_exclusion", **base))
-            elif "include" in low or "furnish" in low:
-                out.append(ExtractedFact(kind="scope_inclusion", **base))
-            else:
-                out.append(ExtractedFact(kind="other", **base))
-        elif doc_type == "rate_sheet":
-            rm = re.search(r"\$(\d[\d,]*\.\d{2})\s*per\s*(hour|day)", line, re.I)
-            if rm:
-                label = re.split(r"\s*\.{2,}|\s{2,}", line)[0].strip()
-                out.append(ExtractedFact(kind="labor_rate", rate=rm.group(1).replace(",", ""),
-                                         unit="h" if rm.group(2).lower() == "hour" else "day",
-                                         **{**base, "topic": label, "summary": f"{label}: ${rm.group(1)}/{rm.group(2).lower()}"}))
-        elif doc_type == "instruction":
-            if low.startswith("please") or "proceed" in low:
-                out.append(ExtractedFact(kind="instruction", person=person, **base))
-        elif doc_type == "spec_revision":
-            if low.startswith(("description:", "construction:")):
-                out.append(ExtractedFact(kind="spec_change", **base))
-        elif doc_type == "daily_report":
-            if line.startswith("-"):
-                qty = None
-                cm = re.search(r"crew of (\d+)[^,]*,\s*(\d+(?:\.\d+)?)\s*hrs? each", low)
-                if cm:
-                    from decimal import Decimal
+    @staticmethod
+    def _fact(s: str, page: int, ctx: dict) -> Optional[ExtractedFact]:
+        def F(fact_type: str, **kw: Any) -> ExtractedFact:
+            return ExtractedFact(fact_type=fact_type, page=page, quote=s, summary=kw.pop("summary", s), **kw)
 
-                    qty = str(Decimal(cm.group(1)) * Decimal(cm.group(2)))
-                out.append(ExtractedFact(kind="work_record", qty=qty, unit="h" if qty else None, **base))
-                if "verbal" in low:
-                    # Deliberately paraphrased (unverifiable) quote: exercises the quote check / greyed-out evidence.
-                    out.append(ExtractedFact(kind="instruction", page=page, date=date, topic=_topic(line), person="Dave Romero",
-                                             quote="GC superintendent directed Keystone in writing to repair all Level 1 lobby drywall",
-                                             summary="Claimed written direction from GC superintendent to repair lobby drywall"))
-        elif doc_type == "timesheet":
-            tm = re.search(r"total\s+(\d+(?:\.\d+)?)", low)
-            if ld and tm:
-                out.append(ExtractedFact(kind="work_record", qty=tm.group(1), unit="h", **base))
-        elif doc_type == "receipt":
-            if low.startswith("total"):
-                mm = _MONEY.search(line)
-                if mm:
-                    amt = mm.group(1).replace(",", "")
-                    out.append(ExtractedFact(kind="material_cost", qty="1", unit="ls", rate=amt, amount=amt,
-                                             **{**base, "topic": base["topic"] or "L2 corridor soffit"}))
-        elif doc_type == "change_order_log":
-            if re.match(r"^CO-\d+", line):
-                parts = [p.strip() for p in line.split("|")]
-                mm = _MONEY.search(line)
-                out.append(ExtractedFact(kind="change_order", co_number=parts[0],
-                                         date=parts[1] if len(parts) > 1 and _DATE.fullmatch(parts[1]) else date,
-                                         amount=mm.group(1).replace(",", "") if mm else None,
-                                         co_status=parts[4] if len(parts) > 4 else None,
-                                         **{k: v for k, v in base.items() if k not in ("date",)} | {"summary": parts[2] if len(parts) > 2 else line}))
-        return out
+        ref, refs = ctx["doc_ref"], ctx["refs"]
+        rules: list[tuple[str, Any]] = [
+            (r"Agreed contract value: \$([\d,]+)\..*", lambda m: F("agreement_value", amount=_money(m.group(1)))),
+            (r"Agreement date: (\w+ \d{1,2}, \d{4})\.", lambda m: F("agreement_date", date=_date(m.group(1)))),
+            (r"Payment terms: .+\.", lambda m: F("payment_term")),
+            (r"Retainage: (\d+(?:\.\d+)?)% of .+\.", lambda m: F("retainage_term", rate=m.group(1), unit="%")),
+            (r"Supply and install (\d+) (.+?)(?: at the locations .+)?\.",
+             lambda m: F("scope_inclusion", qty=m.group(1), unit="ea", entity=m.group(2))),
+            (r"(\w+) branch circuits included in the signed scope\.",
+             lambda m: F("scope_inclusion", qty=_num(m.group(1)), unit="ea", entity="branch circuits")),
+            (r"Complete testing and labeling of installed circuits\.", lambda m: F("scope_inclusion", entity="testing and labeling")),
+            (r"Additional work and proposed pricing are subject to .+\.", lambda m: F("change_procedure")),
+            (r"([A-Z][^.]*?) excluded\.", lambda m: F("scope_exclusion", entity=m.group(1).lower())),
+            (r"Additional labor: \$([\d,]+(?:\.\d+)?) per hour.*\.", lambda m: F("labor_rate", rate=_money(m.group(1)), unit="h")),
+            (r"Materials: documented cost\.", lambda m: F("pricing_basis")),
+            (r"No weekend premium is specified.*\.", lambda m: F("pricing_basis")),
+            (r"Provide (\w+) additional (?:dedicated )?(.+?) for (.+?) equipment\.",
+             lambda m: F("change_description", reference=ref, qty=_num(m.group(1)), unit="ea", entity=m.group(2),
+                         location=m.group(3).replace("-", " "))),
+            (r"Approved additional amount: \$([\d,]+(?:\.\d+)?)\.",
+             lambda m: F("approval", reference=ref, status="approved", amount=_money(m.group(1)))),
+            (r"Signed acceptance recorded by .+ on (\w+ \d{1,2}, \d{4})\.",
+             lambda m: F("approval", reference=ref, status="signed", date=_date(m.group(1)))),
+            (r"(\w+) additional (.+?) installed under ((?:CO|SI)-\d+)\.",
+             lambda m: F("work_completion", related_refs=[m.group(3)], qty=_num(m.group(1)), unit="ea", entity="branch circuits",
+                         location="conference room" if "conference" in m.group(2) else None)),
+            (r"Testing completed and work recorded by the foreman on (\w+ \d{1,2}, \d{4})\.",
+             lambda m: F("work_completion", related_refs=list(refs), date=_date(m.group(1)))),
+            (r"Original scope billing: \$([\d,]+(?:\.\d+)?)\.",
+             lambda m: F("invoice_line", reference=ref, amount=_money(m.group(1)), entity="original scope billing")),
+            (r"Retainage of \$([\d,]+(?:\.\d+)?) \((\d+)%\) is withheld .+\.",
+             lambda m: F("retainage_withheld", reference=ref, amount=_money(m.group(1)), rate=m.group(2), unit="%")),
+            (r"No (?:separate )?(CO-\d+) charge is listed.*\.", lambda m: F("billing_note", reference=ref)),
+            (r"This previously invoiced upgrade is distinct from .+\.", lambda m: F("billing_note", reference=ref)),
+            (r"(CO-\d+) (.+?): \$([\d,]+(?:\.\d+)?)\.",
+             lambda m: F("invoice_line", reference=ref, related_refs=[m.group(1)], amount=_money(m.group(3)), entity=m.group(2))),
+            (r"Revised installation requires (\d+) (.+?)\.",
+             lambda m: F("quantity_change", reference=ref, qty=m.group(1), unit="ea", entity=m.group(2))),
+            (r"Submit pricing for the additional quantity.*\.", lambda m: F("instruction", reference=ref, entity="pricing for the additional quantity")),
+            (r"(\w+) additional (.+?), supplied and installed\.",
+             lambda m: F("change_description", related_refs=list(refs), qty=_num(m.group(1)), unit="ea", entity=m.group(2))),
+            (r"Quantity (\d+) × \$([\d,]+(?:\.\d+)?) each = \$([\d,]+(?:\.\d+)?) proposed\.",
+             lambda m: F("quote", related_refs=list(refs), qty=m.group(1), unit="ea", rate=_money(m.group(2)),
+                         amount=_money(m.group(3)), all_in=True, entity="LED fixtures")),
+            (r"Customer acceptance has not been recorded.*\.", lambda m: F("approval", related_refs=list(refs), status="not_recorded")),
+            (r"Complete the installation during (\w+) access\.",
+             lambda m: F("instruction", reference=ref, entity=f"{m.group(1)} installation")),
+            (r"This instruction documents .+; separate price acceptance is not included\.",
+             lambda m: F("approval", reference=ref, status="not_recorded")),
+            (r"Work: (.+), reference ((?:CO|SI)-\d+)\.", lambda m: F("work_completion", related_refs=[m.group(2)], entity=m.group(1))),
+            (r"(\w+) labor hours recorded\.", lambda m: F("timesheet_hours", related_refs=list(refs), qty=_num(m.group(1)), unit="h")),
+            (r"At the \$([\d,]+)/hour rate in Exhibit B: \$([\d,]+) labor cost\.", lambda m: F("other", amount=_money(m.group(2)))),
+            (r"Payment of \$([\d,]+(?:\.\d+)?) applied to (INV-\d+)(?: \(.+\))?\.",
+             lambda m: F("payment", reference=ref, related_refs=[m.group(2)], amount=_money(m.group(1)))),
+        ]
+        for pattern, build in rules:
+            m = re.fullmatch(pattern, s)
+            if m:
+                return build(m)
+        return None
 
-    # ---- step 2
-
-    def propose_findings(self, facts: list[Fact], documents: list[dict]) -> FindingsProposal:
-        def having(word: str, *, doc_types: tuple[str, ...] = (), kinds: tuple[str, ...] = ()) -> list[Fact]:
-            return [f for f in facts if word in f.quote.lower()
-                    and (not doc_types or f.doc_type in doc_types) and (not kinds or f.kind in kinds)]
-
-        def first(items: list[Fact]) -> Optional[Fact]:
-            return items[0] if items else None
-
-        def ev(items: list[Fact], role: str) -> list[ProposedEvidence]:
-            return [ProposedEvidence(fact_id=f.fact_id, role=role) for f in items]
-
-        findings: list[ProposedFinding] = []
-        markup = first([f for f in facts if f.kind == "markup"])
-
-        # --- A: L2 corridor soffit (new, written instruction, costs)
-        soffit_instr = having("soffit", doc_types=("instruction", "spec_revision"))
-        if soffit_instr:
-            carpenter = first([f for f in facts if f.kind == "labor_rate" and "carpenter" in f.quote.lower()])
-            ts = having("soffit", doc_types=("timesheet",))
-            receipt = first([f for f in facts if f.kind == "material_cost" and f.doc_type == "receipt"])
-            evidence = (ev(soffit_instr, "instruction")
-                        + ev(having("level 2 corridor", doc_types=("subcontract", "scope")), "scope_baseline")
-                        + ev(having("soffit", doc_types=("subcontract", "scope")), "scope_baseline")
-                        + ev(having("soffit", doc_types=("daily_report",)), "work_record")
-                        + ev(ts, "work_record"))
-            costs = [ProposedCostItem(category="labor", description="Carpenter labor - frame and board L2 corridor soffit (C-F)", unit="h",
-                                      qty="27.5", rate="82.00", qty_fact_ids=[f.fact_id for f in ts],
-                                      rate_fact_id=carpenter.fact_id if carpenter else None)]
-            if receipt:
-                costs.append(ProposedCostItem(category="material", description="Soffit materials - studs, track, Type X board (Coastal Building Supply)",
-                                              unit="ls", qty="1", rate=receipt.rate, qty_fact_ids=[receipt.fact_id], rate_fact_id=receipt.fact_id))
-            if markup:
-                costs.append(ProposedCostItem(category="markup", description="Subcontract markup on labor and material", unit="%",
-                                              qty=None, rate=markup.rate, rate_fact_id=markup.fact_id))
-            co = first(having("soffit", kinds=("change_order",)))
-            findings.append(ProposedFinding(
-                change_key="l2-corridor-soffit", title="New soffit at Level 2 corridor (gridlines C-F)",
-                summary="GC superintendent directed a new framed and boarded soffit to conceal the relocated duct (RFI-014 / ASI-03). Work was performed 3/12-3/13 and is not in the change-order log.",
-                status="already_recorded" if co else "new", co_number=co.co_number if co else None,
-                scope_baseline="Soffits only where shown on A-501 Rev 0; Level 2 corridor ceiling framing/board excluded.",
-                requested_work="Frame and board a new 24 in. x 18 in. Type X soffit along the L2 corridor, gridlines C to F.",
-                evidence=evidence, cost_items=costs))
-
-        # --- B: exam room blocking (already recorded as CO-003)
-        blocking_co = first(having("blocking", kinds=("change_order",)))
-        blocking_work = having("blocking", doc_types=("daily_report", "timesheet"))
-        if blocking_work or blocking_co:
-            findings.append(ProposedFinding(
-                change_key="exam-room-blocking", title="In-wall blocking for exam room equipment (Level 1)",
-                summary="Blocking for owner equipment in Level 1 exam rooms 104-112 was performed at GC direction; it appears in the change-order log.",
-                status="already_recorded", co_number=blocking_co.co_number if blocking_co else None,
-                scope_baseline="Blocking included only where shown on A-601 Rev 0.",
-                requested_work="Install in-wall blocking for exam room equipment, rooms 104-112.",
-                evidence=ev(blocking_work, "work_record") + ev(having("blocking", doc_types=("subcontract", "scope")), "scope_baseline")
-                + ([ProposedEvidence(fact_id=blocking_co.fact_id, role="change_order")] if blocking_co else [])))
-
-        # --- C: L1 lobby repair (verbal only, no hours)
-        lobby = having("lobby")
-        if lobby:
-            taper = first([f for f in facts if f.kind == "labor_rate" and "taper" in f.quote.lower()])
-            lobby_claim = [f for f in facts if f.kind == "instruction" and (f.topic or "").startswith("L1 lobby")]
-            findings.append(ProposedFinding(
-                change_key="l1-lobby-drywall-repair", title="Drywall patch and re-tape at Level 1 lobby (damage by others)",
-                summary="Crew patched and re-taped drywall in the Level 1 lobby damaged by the electrical subcontractor, reportedly on a verbal request from the GC superintendent. Hours were not tracked.",
-                status="needs_info",
-                scope_baseline="Repair of finished gypsum board damaged by other trades is excluded; performed only on written direction.",
-                requested_work="Patch and re-tape damaged drywall at the Level 1 lobby electrical box cut-ins.",
-                evidence=ev([f for f in lobby if f.kind == "work_record"], "work_record") + ev(lobby_claim, "instruction")
-                + ev(having("damaged by other trades", doc_types=("subcontract", "scope")), "scope_baseline"),
-                cost_items=[ProposedCostItem(category="labor", description="Drywall finisher labor - lobby patch and re-tape", unit="h",
-                                             qty=None, rate="78.00", qty_fact_ids=[], rate_fact_id=taper.fact_id if taper else None)],
-                questions=[ProposedQuestion(kind="unclear_scope", text="The damage was caused by the electrical subcontractor. Should this be billed to the GC as extra work or back-charged to the electrical sub?")]))
-
-        return FindingsProposal(findings=findings)
-
-    # ---- step 3
-
-    def draft_narrative(self, finding: dict, facts: list[Fact]) -> FindingNarrative:
-        verified = [f for f in facts if f.verified]
-        dated = sorted([f for f in verified if f.date], key=lambda f: (f.date or "", f.fact_id))
-        lines = [f"## {finding['title']}", "", f"**Original scope.** {finding['scope_baseline']}", "",
-                 f"**Requested / performed work.** {finding['requested_work']}", ""]
-        instr = [f for f in verified if f.kind in ("instruction", "spec_change")]
-        if instr:
-            lines.append("**Direction received.** " + " ".join(f'{f.file_name} (p.{f.page}): "{f.quote}" [{f.fact_id}]' for f in instr))
-        else:
-            lines.append("**Direction received.** No verified written direction was found in the project records.")
-        lines.append("")
-        work = [f for f in verified if f.kind == "work_record"]
-        if work:
-            lines.append("**Work performed.** " + " ".join(f"{f.date or ''}: {f.summary} [{f.fact_id}]".strip() for f in work))
-            lines.append("")
-        priced = [c for c in finding.get("ai_cost_items", []) if c.get("amount")]
-        if priced:
-            lines.append("**Costs.** " + "; ".join(f"{c['description']}: {c['formula']}" for c in priced) + ".")
-            lines.append("")
-        if finding.get("co_match"):
-            lines.append(f"**Change-order log.** This work appears to be recorded as {finding['co_match']['co_number']}.")
-            lines.append("")
-        if finding.get("questions"):
-            lines.append("**Open questions.** " + " ".join(q["text"] for q in finding["questions"]))
-            lines.append("")
-        lines.append("We request review of this item. This summary is not a determination of entitlement to payment.")
-        timeline = [ProposedTimelineEntry(date=f.date or "", event=f"{f.file_name}: {f.summary}"[:240], fact_id=f.fact_id) for f in dated]
-        return FindingNarrative(draft="\n".join(lines).strip(), timeline=timeline)
+    def propose_links(self, facts: list[Fact]) -> WorkItemLinks:
+        """Same-work links a careful reader would propose (Python validates them like any model output)."""
+        links: list[ProposedLink] = []
+        by_type: dict[str, list[Fact]] = {}
+        for f in facts:
+            if f.verified:
+                by_type.setdefault(f.fact_type, []).append(f)
+        for ins in by_type.get("instruction", []):
+            if "saturday" in (ins.entity or "").lower():
+                for ex in by_type.get("scope_exclusion", []):
+                    if "weekend" in (ex.entity or "").lower():
+                        links.append(ProposedLink(from_fact_id=ins.fact_id, to_fact_id=ex.fact_id, relation="instructs_excluded",
+                                                  note="Saturday work is weekend installation"))
+                for ts in by_type.get("timesheet_hours", []):
+                    if ins.reference and ins.reference in ts.related_refs:
+                        links.append(ProposedLink(from_fact_id=ts.fact_id, to_fact_id=ins.fact_id, relation="performs"))
+        for q in by_type.get("quote", []):
+            for qc in by_type.get("quantity_change", []):
+                if qc.reference and qc.reference in q.related_refs:
+                    links.append(ProposedLink(from_fact_id=q.fact_id, to_fact_id=qc.fact_id, relation="prices"))
+        return WorkItemLinks(links=links)
 
 
 def get_llm() -> LLM:

@@ -1,0 +1,5 @@
+Payment remittance REM-2026-031
+Payer: Northline Builders. Payee: Summit Electrical. Date: Oct 16, 2026.
+Project: Riverside Office Renovation.
+Payment of $118,750.00 applied to INV-014 (original scope billing of $125,000.00 less $6,250.00 retainage).
+Payment of $1,000.00 applied to INV-015.
