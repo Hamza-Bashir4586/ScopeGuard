@@ -1,16 +1,39 @@
 # ScopeGuard
 
-An AI assistant for construction subcontractors. ScopeGuard reads a project folder in Box (original scope /
-subcontract, revised specs and written instructions, daily reports, timesheets, material receipts, labor rate
-sheets, the existing change-order log), finds **potential extra work that is missing from the change-order log**,
-assembles source-cited evidence and a cost breakdown, raises open questions (missing authorization, unclear scope,
-conflicting records, missing rate or quantity), and drafts a change-request packet. The project manager reviews,
-edits, confirms and exports the packet as a PDF saved back to Box.
+ScopeGuard helps construction companies audit whether recorded project work and changes have been accounted
+for in billing and payment. It connects the agreement, work records, approvals, invoices, and payment evidence,
+then explains gaps with source references.
+
+The primary user is a construction company project manager working with accounting during milestone or final
+closeout reviews. The customer is the building owner or general contractor that hired the company. The value
+is reducing the work of reconstructing project history and identifying missed billing or unresolved compensation.
+
+## Project document
+
+- [Team project overview](docs/project-overview.md): formatted copy of the
+  [Google Doc](https://docs.google.com/document/d/1KT8B7j0jKlHshF5zzJ1tFn_yBeuwlTdnFEwFPxdmKjQ), synced October 17, 2026.
+- Planned workflow: establish the signed baseline; gather project, billing, and payment history; run an audit
+  for a cutoff date; review the evidence and uncertain matches; export a reviewed report or action packet.
+- Keep approved but unbilled amounts, unresolved invoice balances, retainage, credits, and unauthorized work
+  separate. Missing records do not prove that approval, billing, or payment never occurred.
+- [Interactive team prototype](https://scopeguard-team-prototype.elvenspice11.chatgpt.site): the newer approved
+  UI adds discrepancy cards, source-record overlays and categories, review comments, invoice selection, and an
+  evidence-backed draft for customer sign-off. This UI flow is not yet reflected in the Google Doc snapshot.
+
+### Current implementation and differences from the plan
+
+The code below implements the earlier extra-work/change-order workflow: compare Box records with the original
+scope and change-order log, verify evidence and costs, accept reviewer edits, and export change-request packets.
+End-to-end invoice/payment reconciliation and the prototype's multi-item invoice builder remain planned.
+
+The Google Doc snapshot still describes an earlier configuration-loader-only repository. This repository now
+contains the API, worker, frontend, and SAM configuration. `us-east-2` is the source of truth for AWS deployment
+and the `scopeguard/box/ccg` secret. Use the repository setup instructions below for the current build.
 
 **The LLM proposes, Python verifies, the human decides.** Flagged work never implies entitlement to payment, and
 missing authorization stays an open question.
 
-## Architecture
+## Current implementation architecture
 
 ```
 Next.js (web/, Amplify)  --HTTPS-->  API Gateway HTTP API  -->  ApiFunction (Python 3.12, arm64, 29 s)

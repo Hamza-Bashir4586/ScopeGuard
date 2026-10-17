@@ -13,7 +13,7 @@ class BoxConfigurationTests(unittest.TestCase):
     def setUp(self):
         config._cache.clear()
         self.environment = patch.dict("os.environ", {
-            "BOX_SECRET_ID": "test/box", "AWS_REGION": "us-east-1"
+            "BOX_SECRET_ID": "test/box", "AWS_REGION": "us-east-2"
         })
         self.environment.start()
         self.addCleanup(self.environment.stop)
