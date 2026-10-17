@@ -1,0 +1,2 @@
+boto3[crt]>=1.42,<2
+python-dotenv>=1.1,<2
