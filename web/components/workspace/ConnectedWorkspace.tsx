@@ -63,7 +63,7 @@ export default function ConnectedWorkspace() {
   useEffect(() => { setTab("findings"); setCategory("all"); setViewer(null); setActiveWorkItem(null); setInvoiceOpen(false); setUploadOpen(false); setFiles([]); setUploaded([]); setUploadError(null); }, [projectId]);
   useEffect(() => { if (project?.latest_scan?.cutoff_date) setCutoff(project.latest_scan.cutoff_date); }, [project?.latest_scan?.cutoff_date]);
 
-  function navigate(id?: string) { router.push(id ? `/?project=${encodeURIComponent(id)}` : "/"); window.scrollTo({ top: 0, behavior: "instant" }); requestAnimationFrame(() => heading.current?.focus({ preventScroll: true })); }
+  function navigate(id?: string) { if (id) setResetNotice(""); router.push(id ? `/?project=${encodeURIComponent(id)}` : "/"); window.scrollTo({ top: 0, behavior: "instant" }); requestAnimationFrame(() => heading.current?.focus({ preventScroll: true })); }
   function view(sources: SourceRef[], finding?: Finding) {
     if (!sources.length) return;
     setViewer({ sources, scanId: finding?.scan_id, findingId: finding?.finding_id });

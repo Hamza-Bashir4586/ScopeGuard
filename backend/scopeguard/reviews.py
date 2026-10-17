@@ -77,7 +77,10 @@ def blockers_for(ai: dict, review: dict, status: str, ctx: dict) -> list[str]:
     """Why this finding cannot enter a priced invoice draft right now [REV-05, FIN-08/09/12, INV-11]."""
     out: list[str] = []
     if ai.get("amount") is None:
-        out.append("The amount is unknown; a supported quantity and rate are required before invoicing")
+        if any(item.get("amount") is not None for item in ai.get("cost_items", [])):
+            out.append("A quotation alone is not an invoiceable charge; confirm scope and written customer authorization")
+        else:
+            out.append("The amount is unknown; a supported quantity and rate are required before invoicing")
     if status == "dismissed":
         out.append("Dismissed")
     if status == "needs_revalidation":
