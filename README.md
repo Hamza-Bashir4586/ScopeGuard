@@ -8,6 +8,27 @@ The primary user is a construction company project manager working with accounti
 closeout reviews. The customer is the building owner or general contractor that hired the company. The value
 is reducing the work of reconstructing project history and identifying missed billing or unresolved compensation.
 
+# AWS Tools Used
+- AWS Amplify Hosting: hosts our Next.js frontend
+- Amazon API Gateway (HTTP API)
+- AWS Lambda (Python 3.12, arm64): API function and audit worker function
+- Amazon Bedrock: runs Claude Sonnet 4.6 through the Converse API
+- Amazon S3
+- AWS Secrets Manager
+- AWS IAM: least-privilege roles for each Lambda function.
+- AWS CloudFormation via AWS SAM
+- Amazon CloudWatch Logs: the default Lambda logs.
+- AWS CLI and boto3/botocore: boto3 is the SDK we used for our Python backend
+
+# Box Tools Used
+- Box Platform Custom App with Client Credentials Grant (CCG): prevents users from having to login to Box, added as a collaborator on the project folder.
+- Official Box Python SDK (box-sdk-gen)
+- Folder Items API
+- File Download API with the version parameter
+- File info and versions: used to check whether the analyzed version is still available
+- Uploads API: used for saving each generated invoice to the ScopeGuard Packets output folder
+- Folders API
+
 ## Project document
 
 - [Backend requirements and component plan](docs/backend-requirements.md): detailed implementation requirements for the approved hackathon flow, with no user authentication.
