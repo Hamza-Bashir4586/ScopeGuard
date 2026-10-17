@@ -651,17 +651,30 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
         used_identities.add(identity)
         hours_facts = [h for h in of("timesheet_hours") if (ref and ref in all_refs(h))]
         hours_facts += [h for h in linked("performs", ins.fact_id) if h.fact_type == "timesheet_hours" and h not in hours_facts]
-        uniq: dict[tuple, Fact] = {}
-        for h in hours_facts:  # the same hours restated in one record count once
-            uniq.setdefault((h.file_id, str(dec(h.qty))), h)
-        hours_facts = list(uniq.values())
+        # Repeated quantities can be different workers. A printed total is a rollup,
+        # not another time entry to add to those workers' hours.
+        hours_by_file: dict[str, list[Fact]] = {}
+        for h in _dedupe(hours_facts):
+            hours_by_file.setdefault(h.file_id, []).append(h)
+        hours_facts = []
+        hours_conflict = False
+        for entries in hours_by_file.values():
+            totals = [h for h in entries if re.search(r"\btotal\b", h.quote, re.I)]
+            if totals:
+                if len({dec(h.qty) for h in totals}) != 1:
+                    hours_conflict = True
+                hours_facts.append(totals[0])
+            else:
+                hours_facts.extend(entries)
         hour_vals = [dec(h.qty) for h in hours_facts]
-        hours = sum(hour_vals, Decimal(0)) if hours_facts and all(v is not None for v in hour_vals) else None
+        hours = sum(hour_vals, Decimal(0)) if not hours_conflict and hours_facts and all(v is not None for v in hour_vals) else None
         rates = sorted({parse_decimal(r.rate) for r in labor_rates})
         rate_fact = labor_rates[0] if len(rates) == 1 else None
         rate = rates[0] if len(rates) == 1 else None
         work_facts = [w for w in of("work_completion") if ref and ref in all_refs(w)]
         questions = uncertain_billing(identity, [ins, *hours_facts])
+        if hours_conflict:
+            questions.append(_question(identity, "conflicting_records", "The timesheet contains conflicting totals. Confirm the labor hours before invoicing."))
         if hours is None:
             questions.append(_question(identity, "missing_quantity", f"No recorded labor hours were found for {ref or 'this instruction'}. How many hours were worked?"))
         if rate is None:

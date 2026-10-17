@@ -89,7 +89,8 @@ Expected replacement scenario:
 
 - CO-001: $8,500 approved change, completion recorded, billing not found in supplied invoices.
 - SI-009: $1,600 fixture proposal requiring customer acceptance.
-- SI-008: 12 hours at $100/h = $1,200, authorization unresolved.
+- SI-008: 9 total hours at $100/h = $900, authorization unresolved. Individual worker rows are not added
+  again to the printed timesheet total.
 - Corridor receptacles: field record and possible $1,350 quotation need scope/approval/billing review;
   no invoice amount is assigned automatically.
 - INV-014: $100,000 net amount due after the deposit, less $60,000 payment = $40,000 existing balance.
@@ -97,7 +98,7 @@ Expected replacement scenario:
 - CO-002: $1,500 already billed on INV-015; not a new charge. INV-015 payment status remains unknown
   without allocated payment evidence.
 
-The three priced findings total $11,300 only after the user reviews/reconfirms them. The corridor item
+The three priced findings total $11,000 only after the user reviews/reconfirms them. The corridor item
 is excluded until supported. Existing balances are separate from new charges. API changes require no
 frontend/backend contract changes. The backend release is deployed through the existing CloudFormation
 stack with its existing runtime dependencies; future SAM builds use the committed source.
