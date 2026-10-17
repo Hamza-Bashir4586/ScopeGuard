@@ -396,3 +396,15 @@ Clarifications of the contract as implemented in `backend/`; no field was rename
   during the audit (if any) and a `warning`.
 - **Upload response** `warnings` may include "No extractable text found (scanned PDF?)". Uploading a file whose name
   already exists creates a new version of that record (same `file_id`, new `version_id`).
+
+## Demo reset extension
+
+When `demo_reset_enabled` is true on ProjectDetail, `POST /projects/{project_id}/demo-reset` accepts
+`{request_id, expected_revision}` and returns `{project_id, reset_id, reset_at, reviews_cleared,
+records_preserved, message}`. It archives current reviews/draft/project pointer, replaces reviews with
+unreviewed empty states, empties the draft, and clears the current completed-audit pointer. Historical
+scan/generation objects and Box records are retained. Disabled deployments return 404; active scans or
+revision conflicts return 409. The endpoint uses the existing project scan lease during reset.
+
+For a needs-information finding, `cost_items` may contain a verified quotation for review while the finding's
+`amount` remains null. Display that as quoted/excluded; never add it to the invoice subtotal.

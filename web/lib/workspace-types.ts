@@ -49,6 +49,7 @@ export interface Agreement {                    // [PRJ-02..04] available before
 export interface InvoiceDraftSummary { revision: number; item_count: number; subtotal: Money; }
 
 export interface ProjectDetail extends ProjectCard {
+  demo_reset_enabled?: boolean;
   currency: "USD";
   agreement: Agreement;
   audit_action: "run" | "refresh";       // button label [AUD-01]

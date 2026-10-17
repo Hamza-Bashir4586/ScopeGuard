@@ -48,6 +48,7 @@ function query(values: Record<string, string | number | null | undefined>): stri
 export const workspaceApi = {
   projects: (signal?: AbortSignal) => json<{ projects: ProjectCard[] }>("/projects", { signal }),
   project: (id: string, signal?: AbortSignal) => json<ProjectDetail>(projectPath(id), { signal }),
+  resetDemo: (id: string, value: { request_id: string; expected_revision: number }) => json<{ reset_id: string; message: string }>(`${projectPath(id)}/demo-reset`, body("POST", value)),
   records: (id: string, categoryId?: string, signal?: AbortSignal) => json<{ records: SourceRecord[]; categories: RecordCategory[]; total: number }>(`${projectPath(id)}/records${query({ category_id: categoryId })}`, { signal }),
   upload: (id: string, file: File) => { const form = new FormData(); form.append("file", file); return json<SourceRecord>(`${projectPath(id)}/records`, { method: "POST", body: form }); },
   recordPage: (id: string, fileId: string, versionId: string, page: number, scanId?: string, findingId?: string, signal?: AbortSignal) => json<RecordPage>(`${projectPath(id)}/records/${segment(fileId)}/pages/${page}${query({ version_id: versionId, scan_id: scanId, finding_id: findingId })}`, { signal }),

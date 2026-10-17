@@ -221,7 +221,7 @@ def is_approved(f: Fact) -> bool:
 
 
 def short_doc_label(f: Fact) -> str:
-    ref = norm_ref(f.doc_reference)
+    ref = norm_ref(f.doc_reference) if f.category_id != "pricing" else None
     if ref:
         return ref
     stem = f.file_name.rsplit(".", 1)[0]
@@ -610,21 +610,21 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
             ftype, auth, label, proposal = "approved_unbilled", "approved", f"Previously approved · {short_doc_label(accepted[0])}", False
             groups.append(_group("Approval", accepted[:1], accepted[0].quote))
         else:
-            ftype, auth, label, proposal = "scope_change_proposed", "pending", "Proposed addition · Customer sign-off required", True
+            ftype, auth, label, proposal = "scope_change_proposed", "pending", "Written quantity change · Price sign-off required", True
             questions.append(_question(identity, "acceptance_pending",
-                                       f"Customer acceptance of the {ref or 'additional quantity'} pricing was not found in the supplied records; the line stays a proposal."))
+                                       f"The written {ref or 'quantity change'} records the work requirement. Acceptance of its quoted price was not found; the amount stays a proposal."))
         explanation = " ".join(x for x in [
             f"What differs: the signed scope states {cite(base)}; {ref or 'a later record'} states {cite(qc)} - an increase of {qty_str(delta)}.",
             (f"Pricing: {cite(priced)}. {markup_note}" if priced else "Pricing: no supported quotation was found, so no amount is proposed."),
             f"Billing: no invoice line for {ref or 'this quantity'} was found in the supplied invoices"
             + (f" ({', '.join(supplied_invoices)})" if supplied_invoices else "") + ".",
-            ("Authorization: customer acceptance is not recorded in the supplied records, so this is a proposal for customer sign-off."
+            ("Price acceptance: the written instruction records the work requirement, but acceptance of the quoted price is not recorded; this remains a price proposal."
              if not accepted else f"Authorization: {cite(accepted[0])}."),
             (f"How it was priced: {cost[0]['formula']}." if rate is not None else ""),
         ] if x)
         reason = (f"The revised quantity exceeds the original scope by {number_word(delta)} {entity}. "
                   + (f"The quoted {'all-in ' if all_in else ''}rate is {fmt_money(rate)} each, producing a {fmt_money(amount)} proposal. " if rate is not None and amount is not None else "No supported price was found. ")
-                  + ("No prior billing or customer acceptance was found in the supplied records." if not accepted else "Acceptance is recorded."))
+                  + ("The work requirement is recorded in writing; acceptance of the quoted price and matching billing were not found in the supplied records." if not accepted else "Acceptance is recorded."))
         findings.append(_finding(
             project_id, identity, ftype, title=_cap(f"{number_word(delta)} additional {entity}"), reason=reason,
             explanation=explanation, authorization_status=auth, approval_label=label, proposal=proposal, amount=amount,
@@ -705,7 +705,7 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
             ftype, auth, label, proposal = "approved_unbilled", "approved", f"Previously approved · {short_doc_label(accepted[0])}", False
         else:
             ftype, auth, label, proposal = ("authorization_unresolved", "unclear",
-                                            "Proposed change · Authorization unresolved; customer sign-off required", True)
+                                            "Written instruction · Price sign-off required", True)
             questions.append(_question(identity, "missing_authorization",
                                        f"No price acceptance for {ref or 'this instruction'} was found. Acknowledge the unresolved authorization before invoicing."))
         explanation = " ".join(x for x in [
@@ -713,7 +713,7 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
             (f"Work and cost: {cite(hours_facts[0])}; the agreement labor rate is {cite(rate_fact)}." if hours_facts and rate_fact
              else "Work and cost: hours or rate could not be verified."),
             ("No premium rate is assumed because none is stated." if premium or "weekend" in tokens(entity) else ""),
-            ("What is missing: no price acceptance or approval for this work was found in the supplied records; "
+            ("What is missing: acceptance of the proposed price was not found in the supplied records; "
              "the cost alone does not establish payment entitlement." if not accepted else f"Approval: {cite(accepted[0])}."),
             (f"How it was priced: {cost[0]['formula']}." if amount is not None else ""),
         ] if x)
@@ -742,7 +742,15 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
         used_identities.add(identity)
         candidates = [q for q in of("quote") if overlap(q, work) > 0
                       and (dec(q.qty) is None or dec(work.qty) is None or dec(q.qty) == dec(work.qty))]
-        procedure = [f for f in of("change_procedure") if f.file_id in agreement_docs][:1]
+        procedure = sorted([f for f in of("change_procedure") if f.file_id in agreement_docs],
+                           key=lambda f: (not bool(re.search(r"agreement", f.file_name, re.I)), f.fact_id))[:1]
+        reference_cost = []
+        if len(candidates) == 1 and dec(candidates[0].qty) is not None and dec(candidates[0].rate) is not None:
+            candidate = candidates[0]
+            calculated = dec(candidate.qty) * dec(candidate.rate)
+            if dec(candidate.amount) == calculated:
+                reference_cost = [_cost_item("Quotation for review only; excluded from invoice", dec(candidate.qty),
+                                             candidate.unit or "ea", dec(candidate.rate), candidate)]
         questions = [
             _question(identity, "missing_scope_confirmation", "Confirm whether this recorded additional work exceeds the signed scope and which instruction or change it belongs to."),
             _question(identity, "missing_authorization", "Confirm written customer approval, pricing, and whether this work has already been billed before adding a new charge."),
@@ -754,7 +762,7 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
                 ("Potential pricing to check: " + "; ".join(cite(q) for q in candidates[:2]) + ". " if candidates else "No matching price was established. ") +
                 "The record does not establish that the work is outside the agreement, approved, or unbilled. No invoice amount is assigned until these are confirmed.",
             authorization_status="unclear", approval_label="Needs scope and authorization review", proposal=True,
-            amount=None, amount_basis="unknown", cost_items=[], financial=_financial(),
+            amount=None, amount_basis="unknown", cost_items=reference_cost, financial=_financial(),
             groups=[_group("Recorded additional work", [work], work.quote),
                     _group("Potential pricing to verify", candidates[:2], "Possible quotation; confirm it covers this work."),
                     _group("Agreement change procedure", procedure, procedure[0].quote if procedure else "")],

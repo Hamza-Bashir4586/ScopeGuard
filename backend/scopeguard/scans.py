@@ -393,6 +393,7 @@ def project_detail(project_id: str) -> dict:
         "latest_scan": latest_summary,
         "active_scan": summary_view(store, active_scan(store, project_id), cache),
         "records_count": len(refs),
+        "demo_reset_enabled": config.demo_reset_enabled(),
         "new_input_available": new_input,
         "invoice_draft": {"revision": draft["revision"], "item_count": len(draft["lines"]), "subtotal": draft["subtotal"]},
     }

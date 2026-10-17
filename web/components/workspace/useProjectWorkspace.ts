@@ -155,7 +155,19 @@ export function useProjectWorkspace(projectId: string | null) {
     finally { setBusy(null); }
   }
 
+  async function resetDemo(): Promise<boolean> {
+    if (!projectId || busy || activeId) return false;
+    setBusy("reset"); setActionError(null);
+    try {
+      await workspaceApi.resetDemo(projectId, { request_id: crypto.randomUUID(), expected_revision: draft?.revision || 0 });
+      setScan(null); setActiveScan(null); setActiveId(null); setGeneration(null);
+      scanRequest.current = null; generationRequest.current = null;
+      await refresh(); await loadCards(); return true;
+    } catch (err) { await recover(err); return false; }
+    finally { setBusy(null); }
+  }
+
   return { projects, project, records, categories, scan, activeScan, activeId, draft, generation, loading, cardsLoading, error: projectId ? error : cardsError, actionError, busy,
-    setActionError, setBusy, setGeneration, refresh, loadCards, startAudit, saveReview, removeLine, generate, saveToBox,
+    setActionError, setBusy, setGeneration, refresh, loadCards, startAudit, saveReview, removeLine, generate, saveToBox, resetDemo,
     retryStatus: () => { setActionError(null); setPollRetry((value) => value + 1); } };
 }

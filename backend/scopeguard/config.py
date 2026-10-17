@@ -93,6 +93,10 @@ def allowed_origin() -> str:
     return _env("ALLOWED_ORIGIN", "*")
 
 
+def demo_reset_enabled() -> bool:
+    return _env("DEMO_RESET_ENABLED", "false").lower() in ("1", "true")
+
+
 def _has_documents(directory: Path) -> bool:
     if not directory.is_dir():
         return False

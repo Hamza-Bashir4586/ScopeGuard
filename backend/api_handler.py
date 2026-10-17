@@ -30,7 +30,7 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import parse_qs
 
-from scopeguard import box_client, config, invoice, projects, records, reviews, scans
+from scopeguard import box_client, config, demo, invoice, projects, records, reviews, scans
 from scopeguard.box_client import SourceError
 from scopeguard.errors import ApiError, bad_request, conflict, not_found
 from scopeguard.packet import packet_filename, render_packet
@@ -231,6 +231,7 @@ _P = r"([A-Za-z0-9_-]+)"
 _ROUTES = [
     ("GET", re.compile(r"^/projects$"), lambda e, m: get_projects(e)),
     ("GET", re.compile(rf"^/projects/{_P}$"), lambda e, m: get_project(m.group(1))),
+    ("POST", re.compile(rf"^/projects/{_P}/demo-reset$"), lambda e, m: _response(200, demo.reset(m.group(1), _json_body(e)))),
     ("GET", re.compile(rf"^/projects/{_P}/records$"), lambda e, m: get_records(e, m.group(1))),
     ("POST", re.compile(rf"^/projects/{_P}/records$"), lambda e, m: post_record(e, m.group(1))),
     ("GET", re.compile(rf"^/projects/{_P}/records/{_P}/content$"), lambda e, m: get_record_content(e, m.group(1), m.group(2))),

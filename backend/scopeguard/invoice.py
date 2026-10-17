@@ -296,8 +296,8 @@ def render_invoice(m: dict) -> bytes:
         pdf.set_xy(x0, y0 + row_h)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(w, 8, latin1(f"Subtotal (selected items): {_money(m['subtotal'])}"), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    text("Taxes, payment terms and retainage are not applied in this draft. Complete them per the agreement before issuing. "
-         "Existing invoice balances and retainage are tracked separately and are not included as new charges. "
+    text("Confirm taxes and payment terms per the agreement before issuing. "
+         "Existing invoice balances are tracked separately and are not included as new charges. "
          "Proposed items are offered for customer acceptance; this draft does not by itself establish entitlement to payment.",
          8.5, "I", 70, 4.4)
 

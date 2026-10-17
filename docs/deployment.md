@@ -102,3 +102,9 @@ The three priced findings total $11,000 only after the user reviews/reconfirms t
 is excluded until supported. Existing balances are separate from new charges. API changes require no
 frontend/backend contract changes. The backend release is deployed through the existing CloudFormation
 stack with its existing runtime dependencies; future SAM builds use the committed source.
+
+## Reset and presenter guide
+
+The live fictional Riverside deployment enables the archived **Reset demo** action. It returns to the initial
+Run audit workflow, keeping all Box files and saved PDFs. See [demo-presenter-guide.md](demo-presenter-guide.md)
+for the $11,000 walkthrough, decoy, proposal disclosures, and limits on the full-ledger story totals.

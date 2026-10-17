@@ -6,6 +6,11 @@ Description: >
   draft for customer sign-off (docs/api-contract-v2.md).
 
 Parameters:
+  EnableDemoReset:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Enable the archived rehearsal reset for this fictional hackathon project.
   BoxFolderId:
     Type: String
     Description: Box folder ID of the project folder to scan (the number at the end of the Box folder URL).
@@ -96,6 +101,7 @@ Resources:
         Variables:
           WORKER_FUNCTION_NAME: !Ref WorkerFunction
           ALLOWED_ORIGIN: !Ref AllowedOrigin
+          DEMO_RESET_ENABLED: !Ref EnableDemoReset
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref DataBucket
@@ -110,6 +116,12 @@ Resources:
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Ref BoxSecret
       Events:
+        DemoReset:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /projects/{project_id}/demo-reset
         ListProjects:
           Type: HttpApi
           Properties:

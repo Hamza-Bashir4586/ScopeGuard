@@ -16,4 +16,4 @@ region = "us-east-2"
 capabilities = "CAPABILITY_IAM"
 resolve_s3 = true
 confirm_changeset = true
-parameter_overrides = "BoxFolderId=428359026380 AllowedOrigin=https://main.d3aoo1sj9tvhat.amplifyapp.com"
+parameter_overrides = "BoxFolderId=428359026380 AllowedOrigin=https://main.d3aoo1sj9tvhat.amplifyapp.com EnableDemoReset=true"
