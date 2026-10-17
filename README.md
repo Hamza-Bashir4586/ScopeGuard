@@ -10,6 +10,7 @@ is reducing the work of reconstructing project history and identifying missed bi
 
 ## Project document
 
+- [Backend requirements and component plan](docs/backend-requirements.md): detailed implementation requirements for the approved hackathon flow, with no user authentication.
 - [Team project overview](docs/project-overview.md): formatted copy of the
   [Google Doc](https://docs.google.com/document/d/1KT8B7j0jKlHshF5zzJ1tFn_yBeuwlTdnFEwFPxdmKjQ), synced October 17, 2026.
 - Planned workflow: establish the signed baseline; gather project, billing, and payment history; run an audit
