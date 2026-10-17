@@ -354,10 +354,16 @@ def summary_counts(base: Optional[dict], reviews: dict[str, dict], selected: set
         return None
     items = base.get("items", [])
     wids = [i["work_item_id"] for i in items]
+    # Selected items still need review when their source versions changed.
+    # Older scan summaries lack fingerprints and retain their legacy count until refreshed.
+    pending = (sum(1 for item in items if effective_status(
+        reviews.get(item["work_item_id"]) or default_review(item["work_item_id"]), item,
+        item["work_item_id"] in selected)[0] in ("unreviewed", "needs_revalidation"))
+        if all(item.get("fingerprint") for item in items) else to_review_count(wids, reviews, selected))
     eligible = [parse_decimal(i.get("amount")) for i in items
                 if i.get("amount") is not None and (reviews.get(i["work_item_id"]) or {}).get("status") != "dismissed"
                 and i.get("finding_type") in ("approved_unbilled", "scope_change_proposed", "authorization_unresolved")]
     return {"file_count": int(base.get("file_count", 0)), "finding_count": len(items),
-            "to_review_count": to_review_count(wids, reviews, selected),
+            "to_review_count": pending,
             "eligible_total": money_str(sum((e for e in eligible if e is not None), Decimal(0))),
             "by_type": dict(base.get("by_type", {}))}

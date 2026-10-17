@@ -19,7 +19,7 @@ SUPPORTED_EXTENSIONS = (".pdf", ".txt", ".md")
 
 # Analysis versions recorded in every scan manifest and used as the extraction cache key [AUD-03, §8].
 PROMPT_VERSION = "extract-v2.1"
-ANALYSIS_VERSION = "reconcile-v2.1"
+ANALYSIS_VERSION = "reconcile-v2.2"
 
 DEMO_PROJECT_ID = "riverside"
 

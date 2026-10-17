@@ -8,6 +8,7 @@ inventory to real file/version IDs, so the overview opens the actual signed agre
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from . import config
@@ -28,11 +29,12 @@ PROJECTS: list[dict] = [
                         "E-101 Rev A: 48 outlets, 24 LED fixtures, six branch circuits, and testing and labeling of installed "
                         "circuits. Weekend installation and modifications to existing service equipment are excluded. "
                         "Additional work is priced under Exhibit B ($100 per labor hour) and follows the contract change and "
-                        "approval procedure. Progress billing is monthly with 5% retainage."),
+                        "approval procedure and requires written customer approval. A 20% deposit ($25,000) is due on signing; "
+                        "the contract balance is invoiced on completion, with invoices payable net 30 days."),
             "signed_date": "2026-09-28",
             "contract_value": "125000.00",
-            "key_terms": ["Weekend installation excluded", "Changes require customer review",
-                          "Additional labor $100/h (Exhibit B)", "5% retainage"],
+            "key_terms": ["Weekend installation excluded", "Written approval required",
+                          "20% deposit · $25,000", "Completion billing · Net 30"],
             "agreement_file": AGREEMENT_FILE,
             "inclusions": [
                 (AGREEMENT_FILE, 2, "Supply and install 48 outlets at the locations shown on E-101 Rev A."),
@@ -47,14 +49,15 @@ PROJECTS: list[dict] = [
             "pricing_basis": [
                 (EXHIBIT_FILE, 1, "Additional labor: $100 per hour, subject to the contract change procedure."),
                 (EXHIBIT_FILE, 1, "Materials: documented cost."),
-                (EXHIBIT_FILE, 1, "No weekend premium is specified in this sample exhibit."),
+                (EXHIBIT_FILE, 1, "Additional LED fixture, supplied and installed: $800 each."),
+                (EXHIBIT_FILE, 1, "No weekend premium is specified in this exhibit."),
             ],
             "change_terms": [
-                (AGREEMENT_FILE, 3, "Additional work and proposed pricing are subject to the contractual change and approval procedure."),
+                (AGREEMENT_FILE, 3, "No change is billable until it has been approved in writing by Northline Builders."),
             ],
             "payment_terms": [
-                (AGREEMENT_FILE, 1, "Payment terms: monthly progress billing, payable within 30 days of invoice."),
-                (AGREEMENT_FILE, 1, "Retainage: 5% of each progress billing is withheld until final completion and acceptance."),
+                (AGREEMENT_FILE, 1, "A deposit of 20% of the contract value ($25,000) is due on signing."),
+                (AGREEMENT_FILE, 1, "Invoices are payable net 30 days."),
             ],
         },
     },
@@ -89,11 +92,13 @@ def folder_id(project: dict) -> str:
 
 
 def _stem(name: str) -> str:
-    return name.rsplit(".", 1)[0].strip().lower()
+    # Filename typography must not disconnect the agreement's pricing exhibit.
+    stem = re.sub(r"[\u2010-\u2015\u2212]", "-", name.rsplit(".", 1)[0]).lower()
+    return " ".join(stem.split())
 
 
 def find_record(refs: list[SourceFileRef], stem: str) -> Optional[SourceFileRef]:
-    return next((r for r in refs if r.supported and _stem(r.name) == stem.lower()), None)
+    return next((r for r in refs if r.supported and _stem(r.name) == _stem(stem)), None)
 
 
 def agreement_record(project: dict, refs: list[SourceFileRef]) -> Optional[SourceFileRef]:

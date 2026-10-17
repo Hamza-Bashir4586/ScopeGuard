@@ -278,7 +278,8 @@ def _run(scan_id: str, store: BaseStore, source, llm) -> None:
         "warnings": warnings, "links_accepted": len(links),
     })
     summary_base = {"file_count": len(files), "by_type": by_type_counts(result.findings),
-                    "items": [{"work_item_id": a["work_item_id"], "amount": a["amount"], "finding_type": a["finding_type"]}
+                    "items": [{"work_item_id": a["work_item_id"], "amount": a["amount"], "finding_type": a["finding_type"],
+                               "fingerprint": a["fingerprint"]}
                               for a in result.findings]}
     n = len(result.findings)
     now = now_iso()

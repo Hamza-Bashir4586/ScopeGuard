@@ -57,13 +57,14 @@ placeholder values or recreate resources already managed by the scopeguard stack
 
 ## Replacement Riverside records
 
-On October 17 the team removed the initial 11 Box documents because they were the wrong set. Replacement
-documents are pending from the user. The latest stored audit can still show the previous documents;
-those findings and invoice selections must not be presented as the replacement dataset's results.
+On October 17 the team replaced the initial 11 files with 15 Riverside PDFs. The replacement agreement
+uses a $25,000 deposit (20%), completion billing, and net-30 terms. The seeded overview now matches those
+terms; filename matching accepts typographic dash differences in the pricing exhibit. Historical local
+fixtures and the independent /design/ preview still describe the earlier fictional scenario.
 
 - Upload the replacement input documents directly into folder 428359026380; inventory is non-recursive.
 - The signed baseline must be named `Signed scope and agreement.pdf` (or the same stem in TXT/Markdown).
-- Preserve `Exhibit B — Labor and pricing` for the pricing exhibit, or update the project manifest.
+- Preserve the `Exhibit B - Labor and pricing` stem for the pricing exhibit; common dash styles are accepted.
 - Project name, customer, agreement summary, and baseline terms are seeded in
   `backend/scopeguard/projects.py`; reconcile those with any changed replacement agreement.
 - Use readable PDF text, TXT, or Markdown. Image-only scans do not have an OCR path in this MVP.
@@ -79,5 +80,24 @@ findings, save an internal comment, select eligible items, and generate/download
 Check proposal labels and authorization acknowledgments. Save the final demo draft to Box only after
 confirming it uses the replacement documents. Nothing sends an invoice or captures an electronic signature.
 
-Deployment wiring was inspected with the real S3/Box/Bedrock modes enabled. A live audit completed against
-the initial 11 records before they were removed. The replacement dataset still needs this walkthrough.
+The replacement dataset is processed with real Box, Bedrock, and S3. Reconciliation version v2.2 avoids
+deducting a printed deposit twice when the invoice net total already includes it. Additional field work
+without a matched instruction is surfaced as an unpriced needs-information finding, rather than silently
+ignored or assumed approved. Changed source evidence invalidates earlier reviews, even for selected items.
+
+Expected replacement scenario:
+
+- CO-001: $8,500 approved change, completion recorded, billing not found in supplied invoices.
+- SI-009: $1,600 fixture proposal requiring customer acceptance.
+- SI-008: 12 hours at $100/h = $1,200, authorization unresolved.
+- Corridor receptacles: field record and possible $1,350 quotation need scope/approval/billing review;
+  no invoice amount is assigned automatically.
+- INV-014: $100,000 net amount due after the deposit, less $60,000 payment = $40,000 existing balance.
+  The $25,000 deposit is not subtracted twice.
+- CO-002: $1,500 already billed on INV-015; not a new charge. INV-015 payment status remains unknown
+  without allocated payment evidence.
+
+The three priced findings total $11,300 only after the user reviews/reconfirms them. The corridor item
+is excluded until supported. Existing balances are separate from new charges. API changes require no
+frontend/backend contract changes. The backend release is deployed through the existing CloudFormation
+stack with its existing runtime dependencies; future SAM builds use the committed source.

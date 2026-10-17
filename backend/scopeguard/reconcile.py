@@ -711,6 +711,39 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
             amount_basis="quantity_x_rate", cost_items=cost, financial=_financial(amount if accepted else None),
             groups=groups, questions=questions, refs=[r for r in [ref] if r]))
 
+    # Additional work without a numbered instruction must not silently disappear.
+    # This is a review question, not a priced charge or a claim that the work is out of scope.
+    covered_evidence = {e["evidence_id"] for item in findings for group in item["evidence_groups"]
+                        if group["label"] not in ("Original agreement", "Billing comparison") for e in group["evidence"]}
+    for work in of("work_completion"):
+        if evidence_id(work) in covered_evidence or not re.search(r"\b(additional|extra)\b", work.quote, re.I):
+            continue
+        if any(ref in billed_change_refs or f"change:{ref}" in used_identities or f"instruction:{ref}" in used_identities for ref in all_refs(work)):
+            continue
+        identity = f"unmatched-work:{work.file_id}:" + " ".join(sorted(tokens(work.entity or work.quote) | tokens(work.location)))
+        if identity in used_identities:
+            continue
+        used_identities.add(identity)
+        candidates = [q for q in of("quote") if overlap(q, work) > 0
+                      and (dec(q.qty) is None or dec(work.qty) is None or dec(q.qty) == dec(work.qty))]
+        procedure = of("change_procedure")[:1]
+        questions = [
+            _question(identity, "missing_scope_confirmation", "Confirm whether this recorded additional work exceeds the signed scope and which instruction or change it belongs to."),
+            _question(identity, "missing_authorization", "Confirm written customer approval, pricing, and whether this work has already been billed before adding a new charge."),
+        ]
+        findings.append(_finding(
+            project_id, identity, "needs_information", title=_cap(f"recorded additional {work.entity or 'work'}"),
+            reason="A field record describes additional work without a matched change instruction. Scope, authorization, and billing need review.",
+            explanation=f"Recorded work: {cite(work)}. " +
+                ("Potential pricing to check: " + "; ".join(cite(q) for q in candidates[:2]) + ". " if candidates else "No matching price was established. ") +
+                "The record does not establish that the work is outside the agreement, approved, or unbilled. No invoice amount is assigned until these are confirmed.",
+            authorization_status="unclear", approval_label="Needs scope and authorization review", proposal=True,
+            amount=None, amount_basis="unknown", cost_items=[], financial=_financial(),
+            groups=[_group("Recorded additional work", [work], work.quote),
+                    _group("Potential pricing to verify", candidates[:2], "Possible quotation; confirm it covers this work."),
+                    _group("Agreement change procedure", procedure, procedure[0].quote if procedure else "")],
+            questions=questions, refs=sorted(all_refs(work))))
+
     # ---------------- 4. already-billed changes
     for ref in sorted({r for f in invoice_lines for r in all_refs(f) if ref_prefix(r) in CHANGE_PREFIXES}):
         lines = billing_lines_for(ref)
@@ -734,12 +767,21 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
             if inv_refs == {inv} and parse_decimal(p.amount) is not None:
                 pays.append(p)
                 allocated_payment_ids.add(p.fact_id)
-        credits = [c for c in of("credit") if inv in all_refs(c) and parse_decimal(c.amount) is not None]
+        credits = _dedupe([c for c in of("credit") if inv in all_refs(c) and parse_decimal(c.amount) is not None])
         ret = [r for r in of("retainage_withheld") if (own_ref(r) == inv or inv in all_refs(r)) and parse_decimal(r.amount) is not None]
         if billed is None:
             continue
         paid = sum((abs(parse_decimal(p.amount)) for p in pays), Decimal(0)) if pays else None
-        credited = sum((abs(parse_decimal(c.amount)) for c in credits), Decimal(0))
+        # A net amount due can already include deposit/credit deductions printed on the invoice.
+        # Prove that with the invoice's own line arithmetic before subtracting any credit again.
+        embedded_credits: list[Fact] = []
+        if totals and credits and lines:
+            invoice_credits = [c for c in credits if c.file_id == totals[0].file_id]
+            gross_lines = sum((parse_decimal(f.amount) for f in lines), Decimal(0))
+            local_deductions = sum((abs(parse_decimal(c.amount)) for c in invoice_credits), Decimal(0))
+            if local_deductions > 0 and gross_lines - local_deductions == billed:
+                embedded_credits = invoice_credits
+        credited = sum((abs(parse_decimal(c.amount)) for c in credits if c not in embedded_credits), Decimal(0))
         retained = parse_decimal(ret[0].amount) if ret else None
         sources = [f.source_ref() for f in (totals[:1] or lines) + pays + credits + ret]
         if pays:
@@ -752,7 +794,8 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
                                       "records, so the balance is unknown (not assumed unpaid or overdue).", sources))
             continue
         balance = billed - paid - credited
-        formula = f"{fmt_money(billed)} billed − {fmt_money(paid)} allocated payment" + (f" − {fmt_money(credited)} credits" if credits else "") + f" = {fmt_money(balance)}"
+        basis_label = "net invoice amount (printed deductions already included)" if embedded_credits else "billed"
+        formula = f"{fmt_money(billed)} {basis_label} − {fmt_money(paid)} allocated payment" + (f" − {fmt_money(credited)} credits" if credited else "") + f" = {fmt_money(balance)}"
         ret_note = ""
         if retained is not None and retainage_terms:
             pct = parse_decimal(retainage_terms[0].rate)
@@ -772,7 +815,7 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
                                       "not a new charge.", sources))
         for c in credits:
             existing.append(_existing(project_id, "credit", own_ref(c) or inv, f"Credit against {inv}", abs(parse_decimal(c.amount)),
-                                      f"Credit {cite(c)} applied to {inv}.", [c.source_ref()]))
+                                      f"Credit {cite(c)} " + (f"already included in the net amount due on {inv}; not deducted a second time." if c in embedded_credits else f"applied to {inv}."), [c.source_ref()]))
     for p in payments:
         if p.fact_id not in allocated_payment_ids and parse_decimal(p.amount) is not None:
             warnings.append(f"A payment of {fmt_money(parse_decimal(p.amount))} in {p.file_name} could not be allocated to a single "
