@@ -47,7 +47,7 @@ def data_prefix() -> str:
 
 
 def box_secret_arn() -> str:
-    return _env("BOX_SECRET_ARN", "scopeguard/box")
+    return _env("BOX_SECRET_ARN") or _env("BOX_SECRET_ID", "scopeguard/box/ccg")
 
 
 def box_folder_id() -> str:

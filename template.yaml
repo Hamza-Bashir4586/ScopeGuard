@@ -27,6 +27,7 @@ Globals:
       Variables:
         DATA_BUCKET: !Ref DataBucket
         BOX_SECRET_ARN: !Ref BoxSecret
+        BOX_SECRET_ID: !Ref BoxSecret
         BOX_FOLDER_ID: !Ref BoxFolderId
         BEDROCK_MODEL_ID: !Ref BedrockModelId
         STORE: s3
@@ -46,9 +47,9 @@ Resources:
   BoxSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: scopeguard/box
+      Name: scopeguard/box/ccg
       Description: Box Client Credentials Grant app credentials for ScopeGuard. Replace the placeholder values after the first deploy.
-      SecretString: '{"client_id":"REPLACE","client_secret":"REPLACE","enterprise_id":"REPLACE"}'
+      SecretString: '{"BOX_ENTERPRISE_ID":"REPLACE","BOX_CLIENT_ID":"REPLACE","BOX_CLIENT_SECRET":"REPLACE"}'
 
   WorkerFunction:
     Type: AWS::Serverless::Function

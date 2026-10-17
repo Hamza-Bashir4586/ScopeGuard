@@ -4,3 +4,4 @@ box-sdk-gen>=1.10,<2
 pypdf>=5.0,<7
 fpdf2>=2.8,<3
 pydantic>=2.8,<3
+python-dotenv>=1.1,<2  # used by backend/config.py for local .env loading

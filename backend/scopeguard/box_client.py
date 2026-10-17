@@ -89,10 +89,14 @@ def _load_box_credentials() -> dict:
 
     sm = boto3.client("secretsmanager")
     raw = sm.get_secret_value(SecretId=config.box_secret_arn())["SecretString"]
-    creds = json.loads(raw)
-    missing = [k for k in ("client_id", "client_secret", "enterprise_id") if not creds.get(k) or creds.get(k) == "REPLACE"]
+    data = json.loads(raw)
+    # Canonical keys are BOX_CLIENT_ID / BOX_CLIENT_SECRET / BOX_ENTERPRISE_ID (same secret as backend/config.py);
+    # lowercase client_id / client_secret / enterprise_id are still accepted.
+    creds = {k: str(data.get(f"BOX_{k.upper()}") or data.get(k) or "").strip()
+             for k in ("client_id", "client_secret", "enterprise_id")}
+    missing = [k for k, v in creds.items() if not v or v == "REPLACE"]
     if missing:
-        raise RuntimeError(f"Box secret is missing values for: {', '.join(missing)} (update the scopeguard/box secret)")
+        raise RuntimeError(f"Box secret is missing values for: {', '.join(missing)} (update the scopeguard/box/ccg secret)")
     return creds
 
 
