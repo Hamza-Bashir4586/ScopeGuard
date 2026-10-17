@@ -26,7 +26,9 @@ is reducing the work of reconstructing project history and identifying missed bi
 The backend implements the approved project-audit and invoice-draft flow (API contract:
 [`docs/api-contract-v2.md`](docs/api-contract-v2.md), which supersedes [`docs/api-contract.md`](docs/api-contract.md);
 requirement IDs refer to [`docs/backend-requirements.md`](docs/backend-requirements.md)). The Next.js frontend in `web/`
-is being moved to the v2 contract separately.
+uses the v2 contract for the approved styled project workspace, source viewer, reviews, audit polling,
+and invoice generation/download/save flow. See [`web/README.md`](web/README.md) for setup and the separate
+fictional design preview.
 
 **The LLM extracts, Python verifies and decides, the human reviews.** A finding never implies entitlement to payment;
 approved, proposed, already billed, partially paid and retained amounts stay separate, and unknown amounts stay

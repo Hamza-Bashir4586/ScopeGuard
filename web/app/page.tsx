@@ -1,11 +1,10 @@
 import { Suspense } from "react";
-import Dashboard from "@/components/Dashboard";
+import ConnectedWorkspace from "@/components/workspace/ConnectedWorkspace";
 import { Spinner } from "@/components/ui";
 import ScopeGuardWorkspace from "@/components/workspace/ScopeGuardWorkspace";
 
 export default function Page() {
-  // Opt-in presentation surface while the team connects the new backend features.
-  // Existing API behavior and deep links are preserved when this flag is absent.
+  // Fictional, browser-only preview is separate from the default v2 API workspace.
   if (process.env.NEXT_PUBLIC_DESIGN_PREVIEW === "1") return <ScopeGuardWorkspace />;
   return (
     <Suspense
@@ -15,7 +14,7 @@ export default function Page() {
         </div>
       }
     >
-      <Dashboard />
+      <ConnectedWorkspace />
     </Suspense>
   );
 }
