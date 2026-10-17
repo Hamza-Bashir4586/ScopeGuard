@@ -1,4 +1,6 @@
-# ScopeGuard
+# ScopeGuard helps handle cost discrepancies in construction projects
+[The Mess Before ScopeGuard.pdf](https://github.com/user-attachments/files/33606198/The.Mess.Before.ScopeGuard.pdf)
+
 
 ScopeGuard helps construction companies audit whether recorded project work and changes have been accounted
 for in billing and payment. It connects the agreement, work records, approvals, invoices, and payment evidence,
