@@ -544,7 +544,8 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
     for qc in qty_candidates:
         new_qty = dec(qc.qty)
         candidates = [i for i in inclusions if dec(i.qty) is not None]
-        linked_bases = [by_id[b] for (r, a, b) in linkset if r == "changes_quantity_of" and a == qc.fact_id and b in by_id]
+        linked_bases = [by_id[b] for (r, a, b) in linkset if r == "changes_quantity_of" and a == qc.fact_id
+                        and b in by_id and by_id[b].file_id in agreement_docs]
         base = linked_bases[0] if linked_bases else max(candidates, key=lambda i: overlap(qc, i), default=None)
         if base is None or overlap(qc, base) == 0 and not linked_bases or new_qty is None:
             continue
@@ -634,7 +635,8 @@ def reconcile(project_id: str, facts: list[Fact], links: Iterable[Any] = ()) -> 
     for ins in of("instruction"):
         if any(ref_prefix(r) in CHANGE_PREFIXES for r in all_refs(ins)):
             continue  # direction tied to a change order is handled with that change order
-        linked_excl = [by_id[b] for (r, a, b) in linkset if r == "instructs_excluded" and a == ins.fact_id and b in by_id]
+        linked_excl = [by_id[b] for (r, a, b) in linkset if r == "instructs_excluded" and a == ins.fact_id
+                       and b in by_id and by_id[b].file_id in agreement_docs]
         scored = []
         for e in exclusions:
             et = tokens(e.entity) if e.entity else tokens(e.quote)
