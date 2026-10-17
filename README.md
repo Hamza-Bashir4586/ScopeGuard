@@ -31,6 +31,7 @@ is reducing the work of reconstructing project history and identifying missed bi
 
 ## Project document
 
+- [Deployment and team handoff](docs/deployment.md): live website, API, Amplify build configuration, and Riverside document setup.
 - [Backend requirements and component plan](docs/backend-requirements.md): detailed implementation requirements for the approved hackathon flow, with no user authentication.
 - [Team project overview](docs/project-overview.md): formatted copy of the
   [Google Doc](https://docs.google.com/document/d/1KT8B7j0jKlHshF5zzJ1tFn_yBeuwlTdnFEwFPxdmKjQ), synced October 17, 2026.

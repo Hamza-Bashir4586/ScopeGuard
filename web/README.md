@@ -72,10 +72,11 @@ and centered dialogs carry the approved design into the connected flow.
 
 ## Build and deploy
 
-`npm run build` writes static files to `out/`; `amplify.yml` builds these on AWS Amplify Hosting.
+`npm run build` writes static files to `out/`; the repository-root `amplify.yml` builds these on AWS
+Amplify Hosting using `appRoot: web`. `web/amplify.yml` mirrors that configuration.
 Set `NEXT_PUBLIC_API_URL` to the stack's `ApiUrl` **before building**; public Next.js variables are baked
 into the exported bundle. Use `NEXT_PUBLIC_DESIGN_PREVIEW=0` and `NEXT_PUBLIC_LOCAL_DEMO=0` in AWS.
 Configure the backend `AllowedOrigin` for the Amplify origin. AWS region is **us-east-2**.
 
-Live Box/Bedrock calls depend on the deployed backend configuration. A successful local fake-mode
-walkthrough does not verify those external services or deploy the application.
+Live Box/Bedrock calls depend on the deployed backend configuration. See
+[`docs/deployment.md`](../docs/deployment.md) for the deployed URLs, environment wiring, and team handoff.
